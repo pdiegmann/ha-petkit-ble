@@ -87,20 +87,30 @@ git push origin v1.0.0  # Updates existing v1.0.0 release
 - **Layer 3**: Python-based analysis
 - **Layer 4**: Release-Please backup
 
+### **Latest Release Handling**
+- ✅ **Stable Versions** (v1.0.0) → Automatically marked as "Latest" 🥇
+- ✅ **Pre-releases** (v1.0.0-beta) → NOT marked as latest 🧪
+- ✅ **Consistent Logic** across all 4 workflows
+- ✅ **Clear Logging** shows latest marking decisions
+- ✅ **Visual Indicators** in workflow summaries
+
 ### **Error Handling**
 - ✅ External API failures → Fallback to manual generation
 - ✅ Existing releases → Update instead of fail
 - ✅ Network issues → Multiple retry mechanisms  
 - ✅ Malformed commits → Graceful parsing and categorization
+- ✅ Latest marking → Consistent across all workflow types
 
 ## 🎉 **Final Status: PRODUCTION READY**
 
 The automated release system is now:
 
 - ✅ **100% Reliable** - Always creates or updates releases
-- ✅ **Professional Quality** - Home Assistant community focused
+- ✅ **Professional Quality** - Home Assistant community focused  
+- ✅ **Latest Release Support** - Stable versions automatically marked as latest
 - ✅ **Zero Maintenance** - Works without any configuration
 - ✅ **Error Resistant** - Handles all failure scenarios gracefully
 - ✅ **Feature Rich** - Professional formatting, categorization, documentation
+- ✅ **Consistent Logic** - All workflows handle latest releases identically
 
-**Just push version tags and get beautiful automated releases! 🚀**
+**Just push version tags and get beautiful automated releases with proper latest marking! 🚀**
