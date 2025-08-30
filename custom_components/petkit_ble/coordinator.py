@@ -151,11 +151,11 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             if self.address in self.ble_manager.connectiondata:
                 self.commands.init_device_data()
             else:
-                _LOGGER.warning(f\"No connection data for {self.address}, using defaults\")
+                _LOGGER.warning(f"No connection data for {self.address}, using defaults")
                 # Set basic device info manually
-                self.device.name = \"Petkit Water Fountain\"
-                self.device.name_readable = \"Petkit Water Fountain\"  
-                self.device.product_name = \"Petkit BLE Water Fountain\"
+                self.device.name = "Petkit Water Fountain"
+                self.device.name_readable = "Petkit Water Fountain"  
+                self.device.product_name = "Petkit BLE Water Fountain"
                 self.device.device_type = 14  # Default device type for W5
                 self.device.type_code = 14
             
