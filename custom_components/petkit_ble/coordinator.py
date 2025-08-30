@@ -15,10 +15,12 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 from .const import DOMAIN, DEFAULT_SCAN_INTERVAL, CONF_ADDRESS
 from .ha_bluetooth_adapter import HABluetoothAdapter
 
-# Import the existing Petkit library without modifications
+# Import the Petkit library modules (included in the integration)
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'PetkitW5BLEMQTT'))
+
+# Add current directory to path so we can import PetkitW5BLEMQTT
+sys.path.insert(0, os.path.dirname(__file__))
 
 from PetkitW5BLEMQTT.device import Device
 from PetkitW5BLEMQTT.event_handlers import EventHandlers
