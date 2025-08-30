@@ -20,10 +20,10 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'PetkitW5BLEMQTT'))
 
-from device import Device
-from event_handlers import EventHandlers
-from commands import Commands
-from constants import Constants
+from PetkitW5BLEMQTT.device import Device
+from PetkitW5BLEMQTT.event_handlers import EventHandlers
+from PetkitW5BLEMQTT.commands import Commands
+from PetkitW5BLEMQTT.constants import Constants
 
 _LOGGER = logging.getLogger(__name__)
 
