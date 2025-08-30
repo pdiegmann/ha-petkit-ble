@@ -72,6 +72,9 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         # Fix missing mac attribute in Commands class
         self.commands.mac = self.address
         
+        # Set BLE manager reference in device for connection status access
+        self.device.set_ble_manager(self.ble_manager)
+        
         # Initialize data processor
         self.data = PetkitBLEData(self.device)
         
@@ -128,6 +131,9 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
     async def _initialize_device(self) -> None:
         """Initialize the BLE connection and device."""
         try:
+            # Scan for devices first to populate connectiondata
+            await self.ble_manager.scan()
+            
             # Connect to the specific device using HA Bluetooth
             if not await self.ble_manager.connect_device(self.address):
                 raise UpdateFailed(f"Could not connect to device {self.address}")
@@ -141,7 +147,18 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             await self.ble_manager.start_notifications(self.address, Constants.READ_UUID)
             
             # Initialize device data and connection using existing logic
-            self.commands.init_device_data()
+            # Check if we have connection data before trying to initialize device data
+            if self.address in self.ble_manager.connectiondata:
+                self.commands.init_device_data()
+            else:
+                _LOGGER.warning(f\"No connection data for {self.address}, using defaults\")
+                # Set basic device info manually
+                self.device.name = \"Petkit Water Fountain\"
+                self.device.name_readable = \"Petkit Water Fountain\"  
+                self.device.product_name = \"Petkit BLE Water Fountain\"
+                self.device.device_type = 14  # Default device type for W5
+                self.device.type_code = 14
+            
             await self.commands.init_device_connection()
             
             # Wait for device to be fully initialized

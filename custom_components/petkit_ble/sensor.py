@@ -9,6 +9,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfEnergy, UnitOfTime, UnitOfVolume
 from homeassistant.core import HomeAssistant
+from datetime import datetime
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -34,6 +35,9 @@ async def async_setup_entry(
         PetkitEnergyConsumedSensor(coordinator),
         PetkitRSSISensor(coordinator),
         PetkitVoltageSensor(coordinator),
+        PetkitConnectionStatusSensor(coordinator),
+        PetkitConnectionAttemptsSensor(coordinator),
+        PetkitLastSeenSensor(coordinator),
     ]
     
     async_add_entities(entities)
@@ -44,13 +48,21 @@ class PetkitSensorBase(CoordinatorEntity[PetkitBLECoordinator], SensorEntity):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
+        # Use address as identifier if serial is not initialized yet
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.device.serial)},
+            "identifiers": {(DOMAIN, device_id)},
             "name": coordinator.device.name_readable,
             "manufacturer": "Petkit",
             "model": coordinator.device.product_name,
             "sw_version": str(coordinator.device.firmware),
         }
+    
+    def _get_device_id(self) -> str:
+        """Get device ID for unique_id generation."""
+        if self.coordinator.device.serial != "Uninitialized":
+            return self.coordinator.device.serial
+        return self.coordinator.address.replace(":", "")
 
 class PetkitBatteryLevelSensor(PetkitSensorBase):
     """Battery level sensor."""
@@ -62,7 +74,7 @@ class PetkitBatteryLevelSensor(PetkitSensorBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the battery sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_battery"
+        self._attr_unique_id = f"{self._get_device_id()}_battery"
         self._attr_name = f"{coordinator.device.name_readable} Battery"
     
     @property
@@ -80,7 +92,7 @@ class PetkitFilterPercentageSensor(PetkitSensorBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the filter percentage sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_filter_percentage"
+        self._attr_unique_id = f"{self._get_device_id()}_filter_percentage"
         self._attr_name = f"{coordinator.device.name_readable} Filter"
     
     @property
@@ -98,7 +110,7 @@ class PetkitFilterTimeLeftSensor(PetkitSensorBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the filter time left sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_filter_time_left"
+        self._attr_unique_id = f"{self._get_device_id()}_filter_time_left"
         self._attr_name = f"{coordinator.device.name_readable} Filter Time Left"
     
     @property
@@ -116,7 +128,7 @@ class PetkitPumpRuntimeSensor(PetkitSensorBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the pump runtime sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_pump_runtime"
+        self._attr_unique_id = f"{self._get_device_id()}_pump_runtime"
         self._attr_name = f"{coordinator.device.name_readable} Pump Runtime"
     
     @property
@@ -134,7 +146,7 @@ class PetkitPumpRuntimeTodaySensor(PetkitSensorBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the pump runtime today sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_pump_runtime_today"
+        self._attr_unique_id = f"{self._get_device_id()}_pump_runtime_today"
         self._attr_name = f"{coordinator.device.name_readable} Pump Runtime Today"
     
     @property
@@ -152,7 +164,7 @@ class PetkitPurifiedWaterSensor(PetkitSensorBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the purified water sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_purified_water"
+        self._attr_unique_id = f"{self._get_device_id()}_purified_water"
         self._attr_name = f"{coordinator.device.name_readable} Purified Water"
     
     @property
@@ -170,7 +182,7 @@ class PetkitPurifiedWaterTodaySensor(PetkitSensorBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the purified water today sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_purified_water_today"
+        self._attr_unique_id = f"{self._get_device_id()}_purified_water_today"
         self._attr_name = f"{coordinator.device.name_readable} Purified Water Today"
     
     @property
@@ -188,7 +200,7 @@ class PetkitEnergyConsumedSensor(PetkitSensorBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the energy consumed sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_energy_consumed"
+        self._attr_unique_id = f"{self._get_device_id()}_energy_consumed"
         self._attr_name = f"{coordinator.device.name_readable} Energy Consumed"
     
     @property
@@ -207,7 +219,7 @@ class PetkitRSSISensor(PetkitSensorBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the RSSI sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_rssi"
+        self._attr_unique_id = f"{self._get_device_id()}_rssi"
         self._attr_name = f"{coordinator.device.name_readable} Signal Strength"
     
     @property
@@ -226,10 +238,65 @@ class PetkitVoltageSensor(PetkitSensorBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the voltage sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_voltage"
+        self._attr_unique_id = f"{self._get_device_id()}_voltage"
         self._attr_name = f"{coordinator.device.name_readable} Voltage"
     
     @property
     def native_value(self) -> float | None:
         """Return the voltage."""
         return self.coordinator.current_data.get("status", {}).get("voltage")
+
+class PetkitConnectionStatusSensor(PetkitSensorBase):
+    """Connection status sensor."""
+    
+    _attr_icon = "mdi:bluetooth-connect"
+    
+    def __init__(self, coordinator: PetkitBLECoordinator) -> None:
+        """Initialize the connection status sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{self._get_device_id()}_connection_status"
+        self._attr_name = f"{coordinator.device.name_readable} Connection Status"
+    
+    @property
+    def native_value(self) -> str | None:
+        """Return the connection status."""
+        return self.coordinator.current_data.get("status", {}).get("connection_status", "unknown")
+
+class PetkitConnectionAttemptsSensor(PetkitSensorBase):
+    """Connection attempts sensor."""
+    
+    _attr_icon = "mdi:counter"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_registry_enabled_default = False
+    
+    def __init__(self, coordinator: PetkitBLECoordinator) -> None:
+        """Initialize the connection attempts sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{self._get_device_id()}_connection_attempts"
+        self._attr_name = f"{coordinator.device.name_readable} Connection Attempts"
+    
+    @property
+    def native_value(self) -> int | None:
+        """Return the number of connection attempts."""
+        return self.coordinator.current_data.get("status", {}).get("connection_attempts", 0)
+
+class PetkitLastSeenSensor(PetkitSensorBase):
+    """Last seen sensor."""
+    
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:clock-check-outline"
+    _attr_entity_registry_enabled_default = False
+    
+    def __init__(self, coordinator: PetkitBLECoordinator) -> None:
+        """Initialize the last seen sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{self._get_device_id()}_last_seen"
+        self._attr_name = f"{coordinator.device.name_readable} Last Seen"
+    
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the last seen timestamp."""
+        last_seen = self.coordinator.current_data.get("status", {}).get("last_seen")
+        if last_seen:
+            return datetime.fromtimestamp(last_seen)
+        return None
