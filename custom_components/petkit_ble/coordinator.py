@@ -88,6 +88,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         
         self._consumer_task = None
         self._initialized = False
+        self._listeners: set = set()
 
     async def _async_setup(self) -> None:
         """Set up the coordinator during first refresh."""
@@ -113,6 +114,9 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             
             # Update data object
             self.data.update(service_info)
+            
+            # Notify listeners of the update
+            self.async_update_listeners()
             
             return self.data
             
@@ -188,6 +192,24 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
     async def async_set_device_config(self, config_data: list) -> None:
         """Set device configuration."""
         await self.commands.set_device_config(config_data)
+
+    def async_add_listener(self, update_callback) -> callable:
+        """Add a listener for data updates."""
+        self._listeners.add(update_callback)
+        
+        def remove_listener():
+            self._listeners.discard(update_callback)
+        
+        return remove_listener
+
+    def async_remove_listener(self, update_callback) -> None:
+        """Remove a listener."""
+        self._listeners.discard(update_callback)
+
+    def async_update_listeners(self) -> None:
+        """Update all listeners."""
+        for update_callback in self._listeners:
+            update_callback()
 
     @property
     def current_data(self) -> dict[str, Any]:

@@ -36,12 +36,16 @@ class PetkitBinarySensorBase(CoordinatorEntity[PetkitBLECoordinator], BinarySens
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the binary sensor."""
         super().__init__(coordinator)
+        # Use MAC address as fallback if serial not available
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address
+        device_name = coordinator.device.name_readable if coordinator.device.name_readable != "Uninitialized" else f"Petkit {coordinator.address}"
+        
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.device.serial)},
-            "name": coordinator.device.name_readable,
+            "identifiers": {(DOMAIN, device_id)},
+            "name": device_name,
             "manufacturer": "Petkit",
-            "model": coordinator.device.product_name,
-            "sw_version": str(coordinator.device.firmware),
+            "model": coordinator.device.product_name or "Water Fountain",
+            "sw_version": str(coordinator.device.firmware) if coordinator.device.firmware else "Unknown",
         }
 
 class PetkitFilterProblemSensor(PetkitBinarySensorBase):
@@ -52,8 +56,10 @@ class PetkitFilterProblemSensor(PetkitBinarySensorBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the filter problem sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_filter_problem"
-        self._attr_name = f"{coordinator.device.name_readable} Filter Problem"
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address
+        device_name = coordinator.device.name_readable if coordinator.device.name_readable != "Uninitialized" else f"Petkit {coordinator.address}"
+        self._attr_unique_id = f"{device_id}_filter_problem"
+        self._attr_name = f"{device_name} Filter Problem"
         self._attr_icon = "mdi:air-filter"
     
     @property
@@ -70,8 +76,10 @@ class PetkitWaterMissingSensor(PetkitBinarySensorBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the water missing sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_water_missing"
-        self._attr_name = f"{coordinator.device.name_readable} Water Missing"
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address
+        device_name = coordinator.device.name_readable if coordinator.device.name_readable != "Uninitialized" else f"Petkit {coordinator.address}"
+        self._attr_unique_id = f"{device_id}_water_missing"
+        self._attr_name = f"{device_name} Water Missing"
         self._attr_icon = "mdi:water-alert"
     
     @property
@@ -88,8 +96,10 @@ class PetkitBreakdownSensor(PetkitBinarySensorBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the breakdown sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_breakdown"
-        self._attr_name = f"{coordinator.device.name_readable} Breakdown"
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address
+        device_name = coordinator.device.name_readable if coordinator.device.name_readable != "Uninitialized" else f"Petkit {coordinator.address}"
+        self._attr_unique_id = f"{device_id}_breakdown"
+        self._attr_name = f"{device_name} Breakdown"
         self._attr_icon = "mdi:alert-circle"
     
     @property
@@ -106,8 +116,10 @@ class PetkitRunningSensor(PetkitBinarySensorBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the running sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_running"
-        self._attr_name = f"{coordinator.device.name_readable} Running"
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address
+        device_name = coordinator.device.name_readable if coordinator.device.name_readable != "Uninitialized" else f"Petkit {coordinator.address}"
+        self._attr_unique_id = f"{device_id}_running"
+        self._attr_name = f"{device_name} Running"
         self._attr_icon = "mdi:play-circle"
     
     @property
