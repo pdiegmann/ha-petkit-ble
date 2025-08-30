@@ -94,7 +94,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         """Set up the coordinator during first refresh."""
         await self._initialize_device()
 
-    def _needs_poll(self, service_info: bluetooth.BluetoothServiceInfoBleak) -> bool:
+    def _needs_poll(self, service_info: bluetooth.BluetoothServiceInfoBleak, last_poll: float | None) -> bool:
         """Check if we need to poll the device."""
         # Always poll for active data updates
         return True
@@ -193,7 +193,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         """Set device configuration."""
         await self.commands.set_device_config(config_data)
 
-    def async_add_listener(self, update_callback) -> callable:
+    def async_add_listener(self, update_callback, context=None) -> callable:
         """Add a listener for data updates."""
         self._listeners.add(update_callback)
         
