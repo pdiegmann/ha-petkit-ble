@@ -75,14 +75,45 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         # Initialize data processor
         self.data = PetkitBLEData(self.device)
         
+        # Define poll method for this instance
+        async def _async_poll(service_info: bluetooth.BluetoothServiceInfoBleak) -> PetkitBLEData:
+            """Poll the device for updated data."""
+            try:
+                # Device should already be initialized via _async_setup
+                if not self._initialized:
+                    _LOGGER.warning("Device not initialized during poll, attempting initialization")
+                    await self._initialize_device()
+                    
+                # Get fresh device data using existing commands
+                await self.commands.get_battery()
+                await self.commands.get_device_update()
+                await self.commands.get_device_state()
+                
+                # Update data object
+                self.data.update(service_info)
+                
+                # Notify listeners of the update
+                self.async_update_listeners()
+                
+                return self.data
+                
+            except Exception as err:
+                _LOGGER.error("Error polling device: %s", err)
+                raise UpdateFailed(f"Error polling device: {err}") from err
+
+        def _needs_poll(service_info: bluetooth.BluetoothServiceInfoBleak, last_poll: float | None) -> bool:
+            """Check if we need to poll the device."""
+            # Always poll for active data updates
+            return True
+        
         super().__init__(
             hass,
             _LOGGER,
             address=self.address,
             mode=bluetooth.BluetoothScanningMode.ACTIVE,
             update_method=self.data.update,
-            needs_poll_method=self._needs_poll,
-            poll_method=self._async_poll,
+            needs_poll_method=_needs_poll,
+            poll_method=_async_poll,
             connectable=True,
         )
         
@@ -93,36 +124,6 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
     async def _async_setup(self) -> None:
         """Set up the coordinator during first refresh."""
         await self._initialize_device()
-
-    def _needs_poll(self, service_info: bluetooth.BluetoothServiceInfoBleak, last_poll: float | None) -> bool:
-        """Check if we need to poll the device."""
-        # Always poll for active data updates
-        return True
-
-    async def _async_poll(self, service_info: bluetooth.BluetoothServiceInfoBleak) -> PetkitBLEData:
-        """Poll the device for updated data."""
-        try:
-            # Device should already be initialized via _async_setup
-            if not self._initialized:
-                _LOGGER.warning("Device not initialized during poll, attempting initialization")
-                await self._initialize_device()
-                
-            # Get fresh device data using existing commands
-            await self.commands.get_battery()
-            await self.commands.get_device_update()
-            await self.commands.get_device_state()
-            
-            # Update data object
-            self.data.update(service_info)
-            
-            # Notify listeners of the update
-            self.async_update_listeners()
-            
-            return self.data
-            
-        except Exception as err:
-            _LOGGER.error("Error polling device: %s", err)
-            raise UpdateFailed(f"Error polling device: {err}") from err
 
     async def _initialize_device(self) -> None:
         """Initialize the BLE connection and device."""
