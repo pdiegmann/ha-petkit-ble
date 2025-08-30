@@ -32,10 +32,14 @@ class BLEManager:
         self._connection_attempts = 0
         self._last_connection_attempt = None
         self._connection_error = None
-        self._retry_delay = 1.0  # Start with 1 second delay
-        self._max_retry_delay = 60.0  # Maximum retry delay
-        self._max_connection_attempts = 10
         self._last_logged_status = None  # Track last logged status to prevent spam
+        
+        # Persistent connection management
+        self._target_address = None
+        self._connection_monitor_task = None
+        self._should_maintain_connection = False
+        self._connection_lost_event = asyncio.Event()
+        self._stop_event = asyncio.Event()
 
     async def scan(self):
         self.logger.info("Scanning for Petkit BLE devices...")
@@ -46,7 +50,8 @@ class BLEManager:
             self.connectiondata[address] = device
         return self.available_devices
 
-    async def connect_device(self, address):
+    async def connect_device(self, address, start_monitoring=True):
+        """Connect to a device with optional persistent connection monitoring."""
         if address not in self.available_devices:
             self.logger.error(f"Device {address} not found")
             self._update_connection_status(ConnectionStatus.FAILED, f"Device {address} not found in scan results")
@@ -69,20 +74,29 @@ class BLEManager:
             self._update_last_seen()
             
             await self.start_notifications(address, Constants.READ_UUID)
+            
+            # Start persistent connection monitoring if requested
+            if start_monitoring:
+                await self.start_persistent_connection(address)
+            
             return True
             
         except Exception as e:
             self._connection_attempts += 1
             error_msg = f"Connection attempt {self._connection_attempts} failed: {e}"
+            self._update_connection_status(ConnectionStatus.RECONNECTING, error_msg)
             
-            if not self._should_attempt_retry():
-                self._update_connection_status(ConnectionStatus.FAILED, error_msg)
-            else:
-                self._update_connection_status(ConnectionStatus.RECONNECTING, error_msg)
+            # Signal connection lost for instant retry
+            self._connection_lost_event.set()
             
             return False
 
-    async def disconnect_device(self, address):
+    async def disconnect_device(self, address, stop_monitoring=True):
+        """Disconnect from a device with optional monitoring stop."""
+        # Stop persistent monitoring if requested
+        if stop_monitoring:
+            await self.stop_persistent_connection()
+        
         if address in self.connected_devices:
             try:
                 client = self.connected_devices[address]
@@ -107,11 +121,21 @@ class BLEManager:
 
     async def read_characteristic(self, address, characteristic_uuid):
         if address in self.connected_devices:
-            self.logger.info(f"Reading characteristic {characteristic_uuid} from {address}")
-            client = self.connected_devices[address]
-            data = await client.read_gatt_char(characteristic_uuid)
-            self.logger.info(f"Read data: {data}")
-            return data
+            try:
+                self.logger.info(f"Reading characteristic {characteristic_uuid} from {address}")
+                client = self.connected_devices[address]
+                data = await client.read_gatt_char(characteristic_uuid)
+                self.logger.info(f"Read data: {data}")
+                self._update_last_seen()
+                return data
+            except Exception as e:
+                self.logger.error(f"Read failed: {e}")
+                # Mark as disconnected and signal connection lost for instant retry
+                if address in self.connected_devices:
+                    del self.connected_devices[address]
+                self._update_connection_status(ConnectionStatus.RECONNECTING, f"Read failed: {e}")
+                self._connection_lost_event.set()
+                return None
         else:
             self.logger.error(f"Device {address} not connected")
             return None
@@ -127,10 +151,11 @@ class BLEManager:
                 return True
             except Exception as e:
                 self.logger.error(f"Write failed: {e}")
-                # Mark as disconnected so reconnection will be attempted
+                # Mark as disconnected and signal connection lost for instant retry
                 if address in self.connected_devices:
                     del self.connected_devices[address]
                 self._update_connection_status(ConnectionStatus.RECONNECTING, f"Write failed: {e}")
+                self._connection_lost_event.set()
                 return False
         else:
             self.logger.error(f"Device {address} not connected")
@@ -138,19 +163,33 @@ class BLEManager:
 
     async def start_notifications(self, address, characteristic_uuid):
         if address in self.connected_devices:
-            self.logger.info(f"Starting notifications for {characteristic_uuid} on {address}")
-            client = self.connected_devices[address]
-            await client.start_notify(characteristic_uuid, self._handle_notification_wrapper)
-            self.logger.info(f"Notifications started for {characteristic_uuid} on {address}")
-            return True
+            try:
+                self.logger.info(f"Starting notifications for {characteristic_uuid} on {address}")
+                client = self.connected_devices[address]
+                await client.start_notify(characteristic_uuid, self._handle_notification_wrapper)
+                self.logger.info(f"Notifications started for {characteristic_uuid} on {address}")
+                return True
+            except Exception as e:
+                self.logger.error(f"Start notifications failed: {e}")
+                # Mark as disconnected and signal connection lost for instant retry
+                if address in self.connected_devices:
+                    del self.connected_devices[address]
+                self._update_connection_status(ConnectionStatus.RECONNECTING, f"Notifications failed: {e}")
+                self._connection_lost_event.set()
+                return False
         else:
             self.logger.error(f"Device {address} not connected")
             return False
 
     async def _handle_notification_wrapper(self, sender, data):
-        # Update last seen timestamp on successful notification
-        self._update_last_seen()
-        await self.event_handler.handle_notification(sender, data)
+        try:
+            # Update last seen timestamp on successful notification
+            self._update_last_seen()
+            await self.event_handler.handle_notification(sender, data)
+        except Exception as e:
+            self.logger.error(f"Notification handler error: {e}")
+            # Signal connection issue for immediate reconnection attempt
+            self._connection_lost_event.set()
 
     async def stop_notifications(self, address, characteristic_uuid):
         if address in self.connected_devices:
@@ -182,63 +221,116 @@ class BLEManager:
                     if self._connection_status != ConnectionStatus.RECONNECTING:
                         self.logger.error(f"Heartbeat failed: {e}")
                     
-                    await self.disconnect_device(address)
+                    await self.disconnect_device(address, stop_monitoring=False)
                     
-                    # Implement retry logic with exponential backoff
-                    await self._attempt_reconnection_with_backoff(address)
+                    # Signal connection lost for instant retry
+                    self._connection_lost_event.set()
+                    break
 
     async def message_consumer(self, address, characteristic_uuid):
-        while True:
+        while not self._stop_event.is_set():
             if not self.connected_devices.get(address):
-                # Only attempt reconnection if we should retry and we're not already trying
-                if (self._connection_status not in [ConnectionStatus.CONNECTING, ConnectionStatus.RECONNECTING] and
-                    self._should_attempt_retry()):
-                    
-                    await self._attempt_reconnection_with_backoff(address)
-                elif self._connection_status == ConnectionStatus.FAILED:
-                    # If connection failed, wait longer before checking again
-                    await asyncio.sleep(30)
-                
-                await asyncio.sleep(1)
+                # Wait for connection to be re-established by persistent monitor
+                await asyncio.sleep(0.1)
                 continue
 
             try:
-                message = await self.queue.get()
+                # Wait for message with short timeout to allow checking connection status
+                try:
+                    message = await asyncio.wait_for(self.queue.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                    
                 success = await self.write_characteristic(address, characteristic_uuid, message)
                 if success:
                     self._update_last_seen()
                 self.queue.task_done()
             except Exception as e:
                 self.logger.error(f"Message consumer error: {e}")
-                self.queue.task_done()
-                await self._attempt_reconnection_with_backoff(address)
+                try:
+                    self.queue.task_done()
+                except ValueError:
+                    pass  # Queue might be empty
+                # Connection monitor will handle reconnection
     
-    async def _attempt_reconnection_with_backoff(self, address):
-        """Attempt reconnection with exponential backoff."""
-        if not self._should_attempt_retry():
-            return
+    async def start_persistent_connection(self, address):
+        """Start persistent connection monitoring for instant reconnection."""
+        self._target_address = address
+        self._should_maintain_connection = True
         
-        retry_delay = self._calculate_retry_delay()
+        # Stop any existing monitor
+        if self._connection_monitor_task and not self._connection_monitor_task.done():
+            self._connection_monitor_task.cancel()
         
-        # Only log the delay if status changed (prevents spam)
-        if self._connection_status != ConnectionStatus.RECONNECTING:
-            self.logger.info(f"Waiting {retry_delay:.1f}s before reconnection attempt")
+        # Start connection monitor
+        self._connection_monitor_task = asyncio.create_task(self._connection_monitor())
+        self.logger.info(f"Started persistent connection monitoring for {address}")
+    
+    async def stop_persistent_connection(self):
+        """Stop persistent connection monitoring."""
+        self._should_maintain_connection = False
+        self._stop_event.set()
         
-        await asyncio.sleep(retry_delay)
+        if self._connection_monitor_task and not self._connection_monitor_task.done():
+            self._connection_monitor_task.cancel()
+            try:
+                await self._connection_monitor_task
+            except asyncio.CancelledError:
+                pass
         
-        success = await self.connect_device(address)
-        if not success and self._should_attempt_retry():
-            # Will be called again by the consumer/heartbeat loop
-            pass
+        self.logger.info("Stopped persistent connection monitoring")
+    
+    async def _connection_monitor(self):
+        """Continuously monitor connection and reconnect instantly when needed."""
+        while self._should_maintain_connection and not self._stop_event.is_set():
+            try:
+                # Check if we're connected
+                if self._target_address not in self.connected_devices:
+                    self.logger.info("Connection lost, attempting instant reconnection...")
+                    
+                    # Try to reconnect immediately
+                    success = await self.connect_device(self._target_address, start_monitoring=False)
+                    
+                    if not success:
+                        # If immediate reconnection fails, try again after very short delay
+                        await asyncio.sleep(0.1)
+                        continue
+                    else:
+                        self.logger.info("Reconnection successful")
+                        self._connection_attempts = 0  # Reset on successful connection
+                        self._connection_lost_event.clear()
+                
+                # Check connection health
+                elif self._target_address in self.connected_devices:
+                    client = self.connected_devices[self._target_address]
+                    if not client.is_connected:
+                        self.logger.warning("BLE client reports not connected, cleaning up...")
+                        del self.connected_devices[self._target_address]
+                        self._update_connection_status(ConnectionStatus.RECONNECTING, "Client disconnected")
+                        continue
+                
+                # Wait for connection lost event or timeout
+                try:
+                    await asyncio.wait_for(self._connection_lost_event.wait(), timeout=1.0)
+                    self._connection_lost_event.clear()
+                except asyncio.TimeoutError:
+                    pass  # Normal timeout, continue monitoring
+                    
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.error(f"Connection monitor error: {e}")
+                await asyncio.sleep(0.1)  # Brief pause before retry
     
     def reset_connection_state(self):
         """Reset connection tracking state for clean restart."""
         self._connection_status = ConnectionStatus.DISCONNECTED
         self._connection_attempts = 0
-        self._retry_delay = 1.0
         self._connection_error = None
         self._last_connection_attempt = None
         self._last_logged_status = None
+        self._connection_lost_event.clear()
+        self._stop_event.clear()
 
     async def message_producer(self, message):
         await self.queue.put(message)
@@ -276,15 +368,14 @@ class BLEManager:
             if status == ConnectionStatus.CONNECTED:
                 self.logger.info(f"Connection established - Status: {status.value}")
                 self._connection_attempts = 0  # Reset on successful connection
-                self._retry_delay = 1.0  # Reset retry delay
             elif status == ConnectionStatus.DISCONNECTED:
                 self.logger.info(f"Connection closed - Status: {status.value}")
             elif status == ConnectionStatus.CONNECTING:
                 self.logger.info(f"Attempting connection - Status: {status.value}")
             elif status == ConnectionStatus.RECONNECTING:
-                self.logger.info(f"Reconnecting (attempt {self._connection_attempts + 1}/{self._max_connection_attempts}) - Status: {status.value}")
+                self.logger.info(f"Reconnecting (attempt {self._connection_attempts + 1}) - Status: {status.value}")
             elif status == ConnectionStatus.FAILED:
-                self.logger.error(f"Connection failed after {self._max_connection_attempts} attempts - Status: {status.value}")
+                self.logger.error(f"Connection failed - Status: {status.value}")
                 if error:
                     self.logger.error(f"Last error: {error}")
             
@@ -294,11 +385,7 @@ class BLEManager:
         """Update last seen timestamp."""
         self._last_seen = time.time()
     
-    def _calculate_retry_delay(self):
-        """Calculate exponential backoff delay."""
-        delay = min(self._retry_delay * (2 ** self._connection_attempts), self._max_retry_delay)
-        return delay
-    
-    def _should_attempt_retry(self):
-        """Check if we should attempt another retry."""
-        return self._connection_attempts < self._max_connection_attempts
+    @property
+    def is_monitoring_connection(self):
+        """Check if persistent connection monitoring is active."""
+        return self._should_maintain_connection and self._connection_monitor_task and not self._connection_monitor_task.done()

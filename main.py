@@ -32,10 +32,11 @@ class Manager:
     async def run(self, address):
         await self.ble_manager.scan()
         
-        self.logger.info(f"Connecting...")
+        self.logger.info(f"Connecting with persistent monitoring...")
         
-        if await self.ble_manager.connect_device(address):
-            self.logger.info(f"Connected.")
+        # Start persistent connection with instant reconnection
+        if await self.ble_manager.connect_device(address, start_monitoring=True):
+            self.logger.info(f"Connected with persistent monitoring enabled.")
             
             # Start the producer and consumer tasks
             consumer = asyncio.create_task(self.ble_manager.message_consumer(address, Constants.WRITE_UUID))
@@ -53,20 +54,27 @@ class Manager:
                 
                 heartbeat = asyncio.create_task(self.ble_manager.heartbeat(60))
 
-                # Previously: MQTT discovery payloads published and command subscriptions established
+                # Main loop with connection status monitoring
+                self.logger.info("System running with persistent connection monitoring...")
                 while True:
-                    await asyncio.sleep(1)  # Example interval for ad-hoc message sending
+                    # Monitor connection health
+                    if not self.ble_manager.is_monitoring_connection:
+                        self.logger.warning("Connection monitor stopped, restarting...")
+                        await self.ble_manager.start_persistent_connection(address)
+                    
+                    await asyncio.sleep(5)  # Check every 5 seconds
 
             except KeyboardInterrupt:
                 # Handling cleanup on keyboard interrupt
                 self.logger.info("Interrupted, cleaning up...")            
                 
-                # Wait for queue to be empty and disconnect the device
+                # Stop persistent monitoring and disconnect
+                await self.ble_manager.stop_persistent_connection()
                 await self.ble_manager.queue.join()
-                await self.ble_manager.disconnect_device(address)
+                await self.ble_manager.disconnect_device(address, stop_monitoring=False)
             finally:
-                # Previously: MQTT offline status published and connection closed
-                pass
+                # Ensure monitoring is stopped
+                await self.ble_manager.stop_persistent_connection()
 
     async def restart_run(self, address = None):
         if address is None:
@@ -74,6 +82,9 @@ class Manager:
         
         self.logger.info("Restarting run function due to inactivity.")
 
+        # Stop any existing persistent monitoring
+        await self.ble_manager.stop_persistent_connection()
+        
         # Reset device state
         self.device.initialization_state = False
         self.device.info = {'software_version': None}
