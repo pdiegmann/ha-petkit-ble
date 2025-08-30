@@ -39,7 +39,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     
     # Start the coordinator (this replaces async_config_entry_first_refresh for ActiveBluetoothProcessorCoordinator)
-    entry.async_on_unload(coordinator.async_start())
+    entry.async_create_task(hass, coordinator.async_start())
 
     # Register services
     async def handle_reset_filter(call: ServiceCall) -> None:
