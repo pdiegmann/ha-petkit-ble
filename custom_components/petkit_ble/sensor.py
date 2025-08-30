@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from datetime import datetime
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
 from .coordinator import PetkitBLECoordinator
@@ -48,15 +49,28 @@ class PetkitSensorBase(CoordinatorEntity[PetkitBLECoordinator], SensorEntity):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
+        # Device info will be provided by the dynamic property
+    
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info dynamically."""
         # Use address as identifier if serial is not initialized yet
-        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address
-        self._attr_device_info = {
+        device_id = self.coordinator.device.serial if self.coordinator.device.serial != "Uninitialized" else self.coordinator.address
+        return {
             "identifiers": {(DOMAIN, device_id)},
-            "name": coordinator.device.name_readable,
+            "name": self.coordinator.device.name_readable,
             "manufacturer": "Petkit",
-            "model": coordinator.device.product_name,
-            "sw_version": str(coordinator.device.firmware),
+            "model": self.coordinator.device.product_name,
+            "sw_version": str(self.coordinator.device.firmware),
         }
+    
+    @property
+    def name(self) -> str:
+        """Return dynamic entity name."""
+        # Override static _attr_name with dynamic name based on current device state
+        device_name = self.coordinator.device.name_readable if self.coordinator.device.name_readable != "Uninitialized" else "Petkit Device"
+        # Return the sensor-specific name if defined, otherwise fallback
+        return getattr(self, '_sensor_name_template', device_name).format(device_name=device_name)
     
     def _get_device_id(self) -> str:
         """Get device ID for unique_id generation."""
@@ -75,7 +89,7 @@ class PetkitBatteryLevelSensor(PetkitSensorBase):
         """Initialize the battery sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._get_device_id()}_battery"
-        self._attr_name = f"{coordinator.device.name_readable} Battery"
+        self._sensor_name_template = "{device_name} Battery"
     
     @property
     def native_value(self) -> int | None:

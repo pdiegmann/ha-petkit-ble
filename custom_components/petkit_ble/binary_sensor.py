@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
 from .coordinator import PetkitBLECoordinator
@@ -37,15 +38,20 @@ class PetkitBinarySensorBase(CoordinatorEntity[PetkitBLECoordinator], BinarySens
         """Initialize the binary sensor."""
         super().__init__(coordinator)
         # Use MAC address as fallback if serial not available
-        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address
-        device_name = coordinator.device.name_readable if coordinator.device.name_readable != "Uninitialized" else f"Petkit {coordinator.address}"
+        # Device info will be provided by the dynamic property
+    
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info dynamically."""
+        device_id = self.coordinator.device.serial if self.coordinator.device.serial != "Uninitialized" else self.coordinator.address
+        device_name = self.coordinator.device.name_readable if self.coordinator.device.name_readable != "Uninitialized" else f"Petkit {self.coordinator.address}"
         
-        self._attr_device_info = {
+        return {
             "identifiers": {(DOMAIN, device_id)},
             "name": device_name,
             "manufacturer": "Petkit",
-            "model": coordinator.device.product_name or "Water Fountain",
-            "sw_version": str(coordinator.device.firmware) if coordinator.device.firmware else "Unknown",
+            "model": self.coordinator.device.product_name or "Water Fountain",
+            "sw_version": str(self.coordinator.device.firmware) if self.coordinator.device.firmware else "Unknown",
         }
 
 class PetkitFilterProblemSensor(PetkitBinarySensorBase):

@@ -8,6 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN, MODE_NORMAL, MODE_SMART, POWER_OFF, POWER_ON
 from .coordinator import PetkitBLECoordinator
@@ -33,12 +34,18 @@ class PetkitSwitchBase(CoordinatorEntity[PetkitBLECoordinator], SwitchEntity):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the switch."""
         super().__init__(coordinator)
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, coordinator.device.serial)},
-            "name": coordinator.device.name_readable,
+        # Device info will be provided by the dynamic property
+    
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info dynamically."""
+        device_id = self.coordinator.device.serial if self.coordinator.device.serial != "Uninitialized" else self.coordinator.address
+        return {
+            "identifiers": {(DOMAIN, device_id)},
+            "name": self.coordinator.device.name_readable,
             "manufacturer": "Petkit",
-            "model": coordinator.device.product_name,
-            "sw_version": str(coordinator.device.firmware),
+            "model": self.coordinator.device.product_name,
+            "sw_version": str(self.coordinator.device.firmware),
         }
 
 class PetkitPowerSwitch(PetkitSwitchBase):
