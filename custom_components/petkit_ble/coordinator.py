@@ -290,6 +290,28 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
     async def async_set_device_config(self, config_data: list) -> None:
         """Set device configuration."""
         await self.commands.set_device_config(config_data)
+    
+    async def async_request_refresh(self) -> None:
+        """Request a fresh update from the device."""
+        if not self._initialized:
+            _LOGGER.debug("Device not initialized, skipping refresh request")
+            return
+            
+        try:
+            # Get fresh device data using existing commands
+            _LOGGER.debug("Requesting device data refresh")
+            await self.commands.get_battery()
+            await self.commands.get_device_update()
+            await self.commands.get_device_state()
+            
+            # Notify all listeners that data has been updated
+            self.async_update_listeners()
+            _LOGGER.debug("Device data refresh completed")
+            
+        except Exception as err:
+            _LOGGER.warning("Failed to refresh device data: %s", err)
+            # Don't raise the exception - just log the warning
+            # This prevents the switch operation from failing completely
 
     def async_add_listener(self, update_callback, context=None) -> callable:
         """Add a listener for data updates."""
