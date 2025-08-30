@@ -225,7 +225,20 @@ jobs:
           
           python generate_notes.py
           
-      - name: 🚀 Create GitHub Release  
+      - name: 🔍 Check Release Status
+        id: release_status  
+        run: |
+          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "🔄 Updating existing release with alternative generator"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "🎆 Creating new release with alternative generator"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: 🚀 Create or Update GitHub Release  
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
@@ -233,6 +246,8 @@ jobs:
           body: ${{ steps.release_notes.outputs.result }}
           prerelease: ${{ steps.version.outputs.prerelease }}
           make_latest: ${{ steps.version.outputs.prerelease == 'false' }}
+          # Enable updates to existing releases
+          allowUpdates: true
           
       - name: 📋 Workflow Summary
         if: always()

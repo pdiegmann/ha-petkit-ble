@@ -279,15 +279,29 @@ jobs:
           
           python enhanced_release_notes.py
 
-      - name: 🚀 Create GitHub Release
+      - name: 🔍 Check Existing Release
+        id: check_existing
+        run: |
+          if gh release view "${{ steps.version.outputs.tag_name }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "⚡ Release exists - will update with enhanced notes"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "✨ Creating new release with AI-generated content"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: 🚀 Create or Update GitHub Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ steps.version.outputs.tag_name }}
           name: "${{ steps.version.outputs.tag_name }} - PetKit BLE Integration Release"
           body: ${{ steps.openai_release.outputs.result || steps.enhanced_notes.outputs.result }}
           prerelease: ${{ steps.version.outputs.is_prerelease }}
-          generateReleaseNotes: false  # We use AI-generated notes instead
+          generateReleaseNotes: false
           allowUpdates: true
+          updateOnlyUnreleased: false
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 📢 Release Summary

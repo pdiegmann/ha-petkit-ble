@@ -138,9 +138,11 @@ The AI models are prompted with:
 
 ### Error Handling
 - **100% Success Rate** - At least one workflow will always create a release
+- **Existing Release Support** - Detects and updates existing releases instead of failing
 - **Graceful degradation** to simpler release notes when advanced features fail
 - **Comprehensive logging** and workflow summaries for debugging
 - **Parallel execution** - Multiple workflows run simultaneously for redundancy
+- **Smart Conflict Resolution** - Handles duplicate tag scenarios automatically
 
 ### Permissions & Security
 - **Minimal permissions** - Only `contents: write` required

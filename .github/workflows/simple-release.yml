@@ -153,7 +153,21 @@ jobs:
           cat release_notes.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: 🚀 Create GitHub Release
+      - name: 🔍 Check for Existing Release
+        id: check_release
+        run: |
+          # Check if release already exists
+          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "ℹ️ Release ${{ steps.version.outputs.tag }} already exists - will update"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "✨ Creating new release ${{ steps.version.outputs.tag }}"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: 🚀 Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
@@ -162,16 +176,23 @@ jobs:
           prerelease: ${{ steps.version.outputs.prerelease }}
           make_latest: ${{ steps.version.outputs.prerelease == 'false' }}
           generate_release_notes: false
+          # Allow updates to existing releases
+          allowUpdates: true
+          # Replace existing release body
+          updateOnlyUnreleased: false
 
       - name: 📊 Success Summary
         run: |
-          echo "## 🎉 Release Created Successfully!" >> $GITHUB_STEP_SUMMARY
+          ACTION="${{ steps.check_release.outputs.exists == 'true' && 'Updated' || 'Created' }}"
+          echo "## 🎉 Release $ACTION Successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Action** | $ACTION |" >> $GITHUB_STEP_SUMMARY
           echo "| **Version** | ${{ steps.version.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Type** | ${{ steps.version.outputs.release_type }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commits** | ${{ steps.changes.outputs.commits_count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Files** | ${{ steps.changes.outputs.files_changed }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Existed** | ${{ steps.check_release.outputs.exists == 'true' && 'Yes (updated)' || 'No (new)' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "🔗 **[View Release](https://github.com/pdiegmann/ha-petkit-ble/releases/tag/${{ steps.version.outputs.tag }})**" >> $GITHUB_STEP_SUMMARY

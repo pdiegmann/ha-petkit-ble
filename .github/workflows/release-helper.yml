@@ -252,7 +252,20 @@ jobs:
           
           python generate_detailed_notes.py
 
-      - name: 🚀 Create Release
+      - name: 🔍 Detect Existing Release
+        id: detect_release
+        run: |
+          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "🔄 Release exists - backup system will update"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "✨ No existing release - backup system will create"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: 🚀 Create or Update Release
         uses: softprops/action-gh-release@v2
         if: ${{ !steps.release_please.outputs.release_created }}
         with:
@@ -263,6 +276,8 @@ jobs:
           make_latest: ${{ steps.version.outputs.prerelease == 'false' }}
           generate_release_notes: false
           fail_on_unmatched_files: false
+          allowUpdates: true
+          updateOnlyUnreleased: false
 
       - name: 📊 Workflow Summary
         if: always()
