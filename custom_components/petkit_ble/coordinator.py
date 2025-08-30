@@ -243,7 +243,9 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             _LOGGER.info("Notified Home Assistant that device is ready")
             
         except Exception as err:
+            import traceback
             _LOGGER.error("Device initialization failed: %s", err)
+            _LOGGER.debug("Full traceback:\n%s", traceback.format_exc())
             await self._cleanup()
             # Don't raise here - let the system retry later
             # This prevents the integration from failing completely on startup
@@ -263,15 +265,12 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         
         if self._initialization_task and not self._initialization_task.done():
             self._initialization_task.cancel()
+            # Don't await cancelled task, just let it clean up
             try:
-                await self._initialization_task
-            except asyncio.CancelledError:
-                pass
+                # Give it a brief moment to process the cancellation
+                await asyncio.sleep(0.1)
             except Exception as e:
-                _LOGGER.debug(f"Error cleaning up initialization task: {e}")
-        elif self._initialization_task and self._initialization_task.done():
-            # Task is already done, no need to await
-            pass
+                _LOGGER.debug(f"Error during initialization task cancellation: {e}")
                 
         # Stop notifications and disconnect
         if self.address in self.ble_manager.connected_devices:

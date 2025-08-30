@@ -298,5 +298,15 @@ class PetkitLastSeenSensor(PetkitSensorBase):
         """Return the last seen timestamp."""
         last_seen = self.coordinator.current_data.get("status", {}).get("last_seen")
         if last_seen:
-            return datetime.fromtimestamp(last_seen)
+            # Handle both timestamp (float) and ISO string formats for backward compatibility
+            if isinstance(last_seen, str):
+                try:
+                    from datetime import datetime as dt
+                    # Parse ISO format string to datetime
+                    return dt.fromisoformat(last_seen.replace('Z', '+00:00'))
+                except (ValueError, AttributeError):
+                    return None
+            else:
+                # Legacy numeric timestamp format
+                return datetime.fromtimestamp(last_seen)
         return None
