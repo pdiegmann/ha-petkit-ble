@@ -221,6 +221,8 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             _LOGGER.info("Initializing device connection...")
             await self.commands.init_device_connection()
             
+            _LOGGER.info(f"After init_device_connection: device.serial='{self.device.serial}', device.name='{self.device.name}'")
+            
             # Wait for device to be fully initialized
             retry_count = 0
             while self.device.serial == "Uninitialized" and retry_count < 30:
@@ -234,10 +236,16 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
                 # Don't fail - the device might be working even if serial isn't set
                 # Set a default serial based on address
                 self.device.serial = f"PETKIT_{self.address.replace(':', '')[-6:]}"
+                self.device.name = f"Petkit Water Fountain ({self.address})"
+                self.device.name_readable = f"Petkit Water Fountain ({self.address})"
                 _LOGGER.info(f"Using fallback serial: {self.device.serial}")
+                _LOGGER.info(f"Using fallback name: {self.device.name_readable}")
             
             self._initialized = True
             _LOGGER.info(f"Device initialized successfully: {self.device.serial}")
+            
+            # Force an update to notify Home Assistant that device is ready
+            self.async_update_listeners()
             
         except Exception as err:
             _LOGGER.error("Device initialization failed: %s", err)
