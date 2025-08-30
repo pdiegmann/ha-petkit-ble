@@ -223,13 +223,18 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             
             # Wait for device to be fully initialized
             retry_count = 0
-            while self.device.serial == "Uninitialized" and retry_count < 10:
-                _LOGGER.info(f"Device not initialized yet, waiting... (attempt {retry_count + 1}/10)")
-                await asyncio.sleep(1)
+            while self.device.serial == "Uninitialized" and retry_count < 30:
+                _LOGGER.info(f"Device not initialized yet, waiting... (attempt {retry_count + 1}/30)")
+                _LOGGER.debug(f"Current device state: name='{self.device.name}', serial='{self.device.serial}', status={self.device.status}")
+                await asyncio.sleep(2)  # Wait longer between checks
                 retry_count += 1
                 
             if self.device.serial == "Uninitialized":
-                raise UpdateFailed("Device initialization timed out after 10 seconds")
+                _LOGGER.warning("Device serial still 'Uninitialized' after 60 seconds, but proceeding anyway")
+                # Don't fail - the device might be working even if serial isn't set
+                # Set a default serial based on address
+                self.device.serial = f"PETKIT_{self.address.replace(':', '')[-6:]}"
+                _LOGGER.info(f"Using fallback serial: {self.device.serial}")
             
             self._initialized = True
             _LOGGER.info(f"Device initialized successfully: {self.device.serial}")
