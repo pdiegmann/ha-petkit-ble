@@ -10,8 +10,8 @@ from typing import Any, Callable
 
 from bleak_retry_connector import establish_connection
 from homeassistant.components import bluetooth
-from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util, callback
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.util import dt as dt_util
 from homeassistant.helpers.device_registry import format_mac
 
 _LOGGER = logging.getLogger(__name__)
