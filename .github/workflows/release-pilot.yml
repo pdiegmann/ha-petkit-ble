@@ -1,4 +1,4 @@
-name: 🤖 ReleasePilot AI-Powered Release Automation
+name: 🤖 Alternative Release Generation
 
 on:
   push:
@@ -10,9 +10,10 @@ permissions:
   pull-requests: read
 
 jobs:
-  ai-release:
+  alternative-release:
     runs-on: ubuntu-latest
-    name: 🚀 AI-Powered Release Generation
+    name: 🚀 Alternative Release Generation
+    if: ${{ !cancelled() }}  # Run even if main workflow fails
     
     steps:
       - name: 📥 Checkout Repository
@@ -20,70 +21,232 @@ jobs:
         with:
           fetch-depth: 0
           
-      - name: 🤖 Generate Release with ReleasePilot
-        uses: ReleasePilot/action@v1
+      - name: 🏷️ Extract Version Information
+        id: version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Check if pre-release
+          if [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: 🔍 Analyze Changes
+        id: changes
+        run: |
+          # Get previous tag
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${{ steps.version.outputs.tag }}$" | head -1)
+          echo "previous_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="$PREV_TAG..${{ steps.version.outputs.tag }}"
+            echo "Analyzing commits from $RANGE"
+            
+            # Generate commit analysis
+            git log --pretty=format:"- %s (%h)" $RANGE > commits.txt
+            
+            # Count changes
+            COMMITS=$(git rev-list --count $RANGE)
+            FILES=$(git diff --name-only $RANGE | wc -l)
+            
+            echo "commits_count=$COMMITS" >> $GITHUB_OUTPUT
+            echo "files_changed=$FILES" >> $GITHUB_OUTPUT
+          else
+            echo "- Initial release" > commits.txt
+            echo "commits_count=1" >> $GITHUB_OUTPUT
+            echo "files_changed=0" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: 📝 Generate Professional Release Notes
+        id: release_notes
+        run: |
+          cat > generate_notes.py << 'EOF'
+          import os
+          import re
+          from datetime import datetime
+          
+          # Read commit data
+          with open('commits.txt', 'r') as f:
+              commits = f.read().strip()
+          
+          version = "${{ steps.version.outputs.version }}"
+          tag = "${{ steps.version.outputs.tag }}"
+          prev_tag = "${{ steps.changes.outputs.previous_tag }}"
+          commits_count = "${{ steps.changes.outputs.commits_count }}"
+          files_count = "${{ steps.changes.outputs.files_changed }}"
+          is_prerelease = "${{ steps.version.outputs.prerelease }}"
+          
+          # Categorize commits
+          commit_lines = [line.strip() for line in commits.split('\n') if line.strip()]
+          
+          features = []
+          fixes = []
+          performance = []
+          breaking = []
+          docs = []
+          other = []
+          
+          for commit in commit_lines:
+              commit_lower = commit.lower()
+              if any(word in commit_lower for word in ['feat:', 'add:', 'new:', 'implement']):
+                  features.append(commit)
+              elif any(word in commit_lower for word in ['fix:', 'bug:', 'issue:', 'resolve']):
+                  fixes.append(commit)
+              elif any(word in commit_lower for word in ['perf:', 'optim', 'improve', 'enhance', 'speed', 'persistent', 'connection', 'reconnect']):
+                  performance.append(commit)
+              elif any(word in commit_lower for word in ['break', 'deprecat', 'remove']):
+                  breaking.append(commit)
+              elif any(word in commit_lower for word in ['doc:', 'readme', 'guide', 'workflow']):
+                  docs.append(commit)
+              else:
+                  other.append(commit)
+          
+          # Generate release type description
+          if is_prerelease == 'true':
+              release_type = "Pre-release"
+              release_emoji = "🧪"
+          else:
+              release_type = "Stable Release"
+              release_emoji = "🚀"
+          
+          # Create comprehensive release notes
+          notes = f"""
+          # {release_emoji} {tag} - PetKit BLE Integration {release_type}
+          
+          **Professional Home Assistant integration for Petkit W5 water fountains via Bluetooth Low Energy**
+          
+          ## 📊 Release Overview
+          
+          | Metric | Value |
+          |--------|-------|
+          | **Version** | {version} |
+          | **Type** | {release_type} |
+          | **Commits** | {commits_count} changes |
+          | **Files Modified** | {files_count} files |
+          | **Previous Version** | {prev_tag or 'Initial'} |
+          
+          """
+          
+          # Add sections based on categorized commits
+          if breaking:
+              notes += "\n## ⚠️ Breaking Changes\n\n"
+              for item in breaking:
+                  notes += f"{item}\n"
+          
+          if features:
+              notes += "\n## ✨ New Features & Enhancements\n\n"
+              for item in features:
+                  notes += f"{item}\n"
+          
+          if performance:
+              notes += "\n## ⚡ Performance & Reliability Improvements\n\n"
+              for item in performance:
+                  notes += f"{item}\n"
+          
+          if fixes:
+              notes += "\n## 🐛 Bug Fixes & Stability\n\n"
+              for item in fixes:
+                  notes += f"{item}\n"
+          
+          if docs:
+              notes += "\n## 📚 Documentation & Workflows\n\n"
+              for item in docs:
+                  notes += f"{item}\n"
+          
+          if other:
+              notes += "\n## 🔧 Other Changes\n\n"
+              for item in other:
+                  notes += f"{item}\n"
+          
+          # Add standard sections
+          notes += f"""
+          
+          ## 🏠 Home Assistant Integration Benefits
+          
+          - **🔌 Local Control**: No cloud dependencies - all communication via Bluetooth Low Energy
+          - **📊 Real-time Monitoring**: Live device status, battery levels, and filter life tracking  
+          - **🤖 Automation Ready**: Full integration with Home Assistant automations and scripts
+          - **🔄 Persistent Connection**: Reliable BLE connection management with instant reconnection
+          - **🐾 Pet-Focused**: Designed specifically for Petkit W4/W5/CTW2 water fountains
+          
+          ## 📦 Installation & Upgrade
+          
+          ### Via HACS (Recommended)
+          1. ➕ Add custom repository: `https://github.com/pdiegmann/ha-petkit-ble`
+          2. 📍 Install "PetKit BLE Water Fountain" integration
+          3. 🔄 Restart Home Assistant  
+          4. ⚙️ Configure via **Configuration** → **Integrations**
+          
+          ### Manual Installation
+          1. 📁 Copy `custom_components/petkit_ble` to your HA `custom_components/` directory
+          2. 🔄 Restart Home Assistant
+          3. ➕ Add integration via **Configuration** → **Integrations** → **Add Integration**
+          
+          ## 🛠️ Supported Devices
+          
+          - **Petkit W4 Series** - Full feature support
+          - **Petkit W5 Series** - Full feature support (tested with Eversweet 2 Solo)
+          - **Petkit CTW2 Series** - Full feature support
+          
+          ## 🔗 Resources & Support
+          
+          - 📈 **Full Changelog**: https://github.com/pdiegmann/ha-petkit-ble/compare/{prev_tag}...{tag}
+          - 📚 **Documentation**: https://github.com/pdiegmann/ha-petkit-ble#readme  
+          - 🐛 **Issues & Support**: https://github.com/pdiegmann/ha-petkit-ble/issues
+          - 📦 **HACS Repository**: https://github.com/pdiegmann/ha-petkit-ble
+          - 🏠 **Home Assistant Community**: [Forum Discussion](https://community.home-assistant.io/)
+          
+          ## 🐾 About This Integration
+          
+          Transform your Petkit water fountain into a smart Home Assistant device! Monitor your pet's hydration system with real-time status updates, automate LED schedules, track filter life, and receive alerts for maintenance - all without relying on cloud services.
+          
+          **Perfect for**: Pet owners who want local control, privacy-conscious users, and Home Assistant enthusiasts looking to expand their IoT ecosystem.
+          
+          ---
+          
+          *Generated automatically on {datetime.now().strftime('%Y-%m-%d %H:%M UTC')} • Powered by GitHub Actions*
+          """
+          
+          # Save to file
+          with open('release_notes.md', 'w') as f:
+              f.write(notes)
+          
+          # Output for GitHub Actions
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"result<<EOF\n{notes}\nEOF\n")
+          
+          print("✅ Professional release notes generated successfully")
+          EOF
+          
+          python generate_notes.py
+          
+      - name: 🚀 Create GitHub Release  
+        uses: softprops/action-gh-release@v2
         with:
-          # GitHub Token for API access
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "${{ steps.version.outputs.tag }} - PetKit BLE Integration"
+          body: ${{ steps.release_notes.outputs.result }}
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          make_latest: ${{ steps.version.outputs.prerelease == 'false' }}
           
-          # AI Model Configuration
-          ai-provider: "openai"
-          ai-model: "gpt-4o-mini"
-          
-          # Release Configuration
-          tag-name: ${{ github.ref_name }}
-          release-title: "${{ github.ref_name }} - PetKit BLE Integration Release"
-          
-          # AI Prompt Template
-          ai-prompt: |
-            Create comprehensive release notes for PetKit W5 BLE MQTT v{version}.
-            
-            This is a Home Assistant integration providing:
-            - Bluetooth Low Energy control for Petkit water fountains
-            - Local device management without cloud dependencies  
-            - Real-time monitoring and automation capabilities
-            - Connection reliability and device status tracking
-            
-            Target audience: Home Assistant users, IoT enthusiasts, pet owners with smart devices.
-            
-            Generate professional release notes with:
-            1. 🚀 Release highlights and key improvements
-            2. ✨ New features and capabilities
-            3. 🐛 Bug fixes and stability improvements  
-            4. ⚡ Performance optimizations
-            5. 🔧 Technical changes and developer notes
-            6. 📚 Documentation updates
-            7. 🔗 Relevant links and resources
-            
-            Use clear sections, emojis for visual appeal, and focus on user benefits.
-            Highlight any breaking changes with ⚠️ warnings.
-            Include installation/upgrade guidance where relevant.
-            
-            Make it technical but accessible for Home Assistant community.
-          
-          # Change Detection
-          include-commits: true
-          include-diff: true
-          commit-limit: 100
-          
-          # Release Settings  
-          draft: false
-          prerelease: auto  # Auto-detect based on version format
-          
-          # Additional Context
-          repository-context: |
-            Repository: PetKit W5 BLE MQTT Integration
-            Platform: Home Assistant / Python
-            License: MIT
-            Main Focus: IoT device control, BLE communication, pet automation
-            
-      - name: 📋 Release Summary
+      - name: 📋 Workflow Summary
         if: always()
         run: |
-          echo "## 🎉 AI Release Generation Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## 🎉 Alternative Release Workflow Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Tag**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Repository**: pdiegmann/ha-petkit-ble" >> $GITHUB_STEP_SUMMARY
-          echo "**AI Model**: gpt-4o-mini" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | ${{ steps.version.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | ${{ steps.version.outputs.tag }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-release | ${{ steps.version.outputs.prerelease }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commits | ${{ steps.changes.outputs.commits_count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Files | ${{ steps.changes.outputs.files_changed }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "🔗 **View Release**: https://github.com/pdiegmann/ha-petkit-ble/releases/tag/${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
+          echo "- [Release Page](https://github.com/pdiegmann/ha-petkit-ble/releases/tag/${{ steps.version.outputs.tag }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Repository](https://github.com/pdiegmann/ha-petkit-ble)" >> $GITHUB_STEP_SUMMARY

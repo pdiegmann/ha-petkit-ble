@@ -1,0 +1,177 @@
+name: 📦 Simple Automated Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    name: 🚀 Create Professional Release
+    
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🏷️ Parse Version Info
+        id: version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Detect pre-release
+          if [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "release_type=Stable Release" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "release_type=Pre-Release" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 📊 Analyze Changes
+        id: changes
+        run: |
+          # Get previous tag for comparison
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${{ steps.version.outputs.tag }}$" | head -1)
+          echo "previous_tag=$PREV_TAG" >> $GITHUB_OUTPUT
+          
+          if [ -n "$PREV_TAG" ]; then
+            # Generate commit list
+            git log --pretty=format:"- %s (%h)" $PREV_TAG..${{ steps.version.outputs.tag }} > commits.txt
+            
+            # Count changes
+            COMMITS=$(git rev-list --count $PREV_TAG..${{ steps.version.outputs.tag }})
+            FILES=$(git diff --name-only $PREV_TAG..${{ steps.version.outputs.tag }} | wc -l)
+            
+            echo "commits_count=$COMMITS" >> $GITHUB_OUTPUT
+            echo "files_changed=$FILES" >> $GITHUB_OUTPUT
+          else
+            echo "- Initial release" > commits.txt
+            echo "commits_count=1" >> $GITHUB_OUTPUT
+            echo "files_changed=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 📝 Generate Release Notes
+        id: notes
+        run: |
+          cat > release_notes.md << EOF
+          # 🚀 ${{ steps.version.outputs.tag }} - PetKit BLE Integration
+
+          **${{ steps.version.outputs.release_type }}** | 🏠 Home Assistant Integration | 📡 Bluetooth Low Energy Control
+
+          > 🐾 **Professional Home Assistant integration** for Petkit W4/W5/CTW2 water fountains with local Bluetooth control
+
+          ## 📈 Release Overview
+
+          | Metric | Value |
+          |--------|-------|
+          | **Version** | \`${{ steps.version.outputs.version }}\` |
+          | **Type** | ${{ steps.version.outputs.release_type }} |
+          | **Previous** | \`${{ steps.changes.outputs.previous_tag || 'Initial' }}\` |
+          | **Commits** | ${{ steps.changes.outputs.commits_count }} changes |
+          | **Files** | ${{ steps.changes.outputs.files_changed }} modified |
+
+          ## 📋 Changes in This Release
+
+          $(cat commits.txt)
+
+          ## 🏠 Home Assistant Integration Benefits
+
+          ### 🔌 Core Features
+          - **🔗 Local BLE Control** - Direct device communication without cloud dependencies
+          - **📊 Real-time Monitoring** - Live status updates for battery, filter, and water levels
+          - **🤖 Smart Automation** - Full Home Assistant automation support with device triggers
+          - **🔄 Persistent Connection** - Automatic reconnection and robust error recovery
+          - **🔒 Privacy First** - All data stays local with no external services required
+
+          ### 🐱 Pet Care Automation
+          - **💧 Hydration Tracking** - Monitor daily water consumption patterns
+          - **⚠️ Maintenance Alerts** - Automated filter replacement and cleaning reminders  
+          - **⏰ Smart Scheduling** - LED brightness control and Do Not Disturb automation
+          - **🔋 Health Monitoring** - Battery status and device performance tracking
+
+          ## 🛠️ Installation & Setup
+
+          ### Via HACS (Recommended)
+          1. **➕ Add Repository**: \`https://github.com/pdiegmann/ha-petkit-ble\`
+          2. **📦 Install Integration**: Search "PetKit BLE Water Fountain" in HACS
+          3. **🔄 Restart Home Assistant**
+          4. **⚙️ Configure**: Go to Configuration → Integrations → Add Integration
+
+          ### Manual Installation
+          1. **📁 Download**: Clone or download this repository
+          2. **📋 Copy Files**: Place \`custom_components/petkit_ble\` in your HA custom_components directory
+          3. **🔄 Restart HA** and add via Integrations page
+
+          ## 📱 Supported Devices
+
+          | Device Series | Status | Features | Notes |
+          |---------------|--------|----------|-------|
+          | **Petkit W4** | ✅ Full Support | All sensors, controls | Complete feature set |
+          | **Petkit W5** | ✅ Full Support | All sensors, controls | Tested with Eversweet 2 Solo |
+          | **Petkit CTW2** | ✅ Full Support | All sensors, controls | All variants supported |
+
+          ## 🔗 Resources & Support
+
+          ### 📚 Documentation & Links
+          - 📊 **[Full Changelog](https://github.com/pdiegmann/ha-petkit-ble/compare/${{ steps.changes.outputs.previous_tag }}...${{ steps.version.outputs.tag }})** - Detailed technical changes
+          - 📖 **[Documentation](https://github.com/pdiegmann/ha-petkit-ble#readme)** - Setup guides and troubleshooting
+          - 🐛 **[Issues & Support](https://github.com/pdiegmann/ha-petkit-ble/issues)** - Bug reports and feature requests
+          - 📦 **[HACS Repository](https://github.com/pdiegmann/ha-petkit-ble)** - Easy installation and updates
+
+          ### 🌐 Community Support
+          - 🏠 **[Home Assistant Community](https://community.home-assistant.io/)** - General HA discussions
+          - 💬 **[Discord](https://discord.gg/home-assistant)** - Real-time community chat
+          - 🔗 **[Reddit r/homeassistant](https://reddit.com/r/homeassistant)** - Tips, showcases, and help
+
+          ## 🐾 About This Integration
+
+          Transform your Petkit water fountain into a sophisticated IoT device fully integrated with Home Assistant! 
+
+          **🎯 Perfect for**: Pet owners seeking reliable local control, privacy-conscious users avoiding cloud services, and Home Assistant enthusiasts expanding their smart home ecosystem.
+
+          **🌟 Key Benefits**: Real-time pet hydration monitoring, automated maintenance scheduling, energy-efficient operation tracking, and seamless Home Assistant automation integration.
+
+          ---
+
+          **🌟 If this integration helps keep your pet healthy and hydrated, consider starring the repository!** ⭐
+
+          *Automatically generated release • Powered by GitHub Actions & Home Assistant Community*
+          EOF
+
+          # Output the release notes
+          echo "result<<EOF" >> $GITHUB_OUTPUT
+          cat release_notes.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: 🚀 Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "${{ steps.version.outputs.tag }} - PetKit BLE Integration"
+          body: ${{ steps.notes.outputs.result }}
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          make_latest: ${{ steps.version.outputs.prerelease == 'false' }}
+          generate_release_notes: false
+
+      - name: 📊 Success Summary
+        run: |
+          echo "## 🎉 Release Created Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version** | ${{ steps.version.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Type** | ${{ steps.version.outputs.release_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commits** | ${{ steps.changes.outputs.commits_count }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Files** | ${{ steps.changes.outputs.files_changed }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 **[View Release](https://github.com/pdiegmann/ha-petkit-ble/releases/tag/${{ steps.version.outputs.tag }})**" >> $GITHUB_STEP_SUMMARY

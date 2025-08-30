@@ -77,78 +77,192 @@ jobs:
             echo "files_changed=0" >> $GITHUB_OUTPUT
           fi
 
-      - name: 🎨 Generate Release Notes with Release Helper
-        id: release_helper
-        uses: google-github-actions/release-please-action@v4
+      - name: 🎨 Generate Release with Release-Please
+        id: release_please
+        uses: google-github-actions/release-please-action@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          release-type: python
+          release-type: simple
           package-name: petkit-ble
-          changelog-types: |
-            [
-              {"type": "feat", "section": "✨ Features", "hidden": false},
-              {"type": "fix", "section": "🐛 Bug Fixes", "hidden": false},
-              {"type": "perf", "section": "⚡ Performance", "hidden": false},
-              {"type": "docs", "section": "📚 Documentation", "hidden": false},
-              {"type": "ci", "section": "🔧 CI/CD", "hidden": false},
-              {"type": "refactor", "section": "♻️ Refactoring", "hidden": false}
-            ]
+        continue-on-error: true
 
-      - name: 🧠 Enhanced AI Release Notes
-        id: ai_notes
-        uses: microsoft/AI-Inference@v1
-        if: steps.release_helper.outcome != 'success'
-        with:
-          model: gpt-4o-mini
-          prompt: |
-            Generate professional release notes for PetKit W5 BLE MQTT v${{ steps.version.outputs.version }}.
-
-            ## Project Overview:
-            - Home Assistant integration for Petkit W5 water fountains
-            - Bluetooth Low Energy (BLE) communication
-            - Local control without cloud dependencies
-            - Reliability-focused pet device automation
-
-            ## Release Context:
-            - Version: ${{ steps.version.outputs.version }} (${{ steps.version.outputs.release_type }})
-            - Previous: ${{ steps.analysis.outputs.previous_tag }}
-            - Commits: ${{ steps.analysis.outputs.commits_count }}
-            - Files: ${{ steps.analysis.outputs.files_changed }}
-            - First Release: ${{ steps.analysis.outputs.first_release }}
-
-            ## Change Categories:
-            New Features: $([ -s new_features.txt ] && cat new_features.txt || echo "None")
-            Bug Fixes: $([ -s bug_fixes.txt ] && cat bug_fixes.txt || echo "None")  
-            Performance: $([ -s performance.txt ] && cat performance.txt || echo "None")
-            Breaking Changes: $([ -s breaking.txt ] && cat breaking.txt || echo "None")
-            Documentation: $([ -s documentation.txt ] && cat documentation.txt || echo "None")
-
-            ## File Changes:
-            Code: $([ -s code_changes.txt ] && cat code_changes.txt | wc -l || echo "0") files
-            Docs: $([ -s doc_changes.txt ] && cat doc_changes.txt | wc -l || echo "0") files
-            Workflows: $([ -s workflow_changes.txt ] && cat workflow_changes.txt | wc -l || echo "0") files
-
-            Create comprehensive release notes with:
-            1. Executive summary highlighting key improvements
-            2. User-focused benefit descriptions
-            3. Technical details for developers
-            4. Installation/upgrade guidance
-            5. Proper emoji usage and professional formatting
-            6. Clear categorization of changes
-
-            Format as GitHub Markdown suitable for Home Assistant users managing pet devices.
+      - name: 🧠 Generate Detailed Release Notes
+        id: detailed_notes
+        if: always()
+        run: |
+          cat > generate_detailed_notes.py << 'EOF'
+          import os
+          from datetime import datetime
+          
+          version = "${{ steps.version.outputs.version }}"
+          tag = "${{ steps.version.outputs.tag }}"
+          prev_tag = "${{ steps.analysis.outputs.previous_tag }}"
+          commits_count = "${{ steps.analysis.outputs.commits_count }}"
+          files_count = "${{ steps.analysis.outputs.files_changed }}"
+          is_prerelease = "${{ steps.version.outputs.prerelease }}"
+          release_type = "${{ steps.version.outputs.release_type }}"
+          is_first = "${{ steps.analysis.outputs.first_release }}"
+          
+          # Read categorized changes
+          def read_file_safe(filename):
+              try:
+                  with open(filename, 'r') as f:
+                      return [line.strip() for line in f.readlines() if line.strip()]
+              except:
+                  return []
+          
+          features = read_file_safe('new_features.txt')
+          fixes = read_file_safe('bug_fixes.txt')
+          performance = read_file_safe('performance.txt')
+          breaking = read_file_safe('breaking.txt')
+          docs = read_file_safe('documentation.txt')
+          
+          # Read file changes
+          code_changes = read_file_safe('code_changes.txt')
+          doc_changes = read_file_safe('doc_changes.txt')
+          workflow_changes = read_file_safe('workflow_changes.txt')
+          
+          # Generate comprehensive release notes
+          status_emoji = "🧪" if is_prerelease == "true" else "✅"
+          
+          notes = f"""
+          # 🚀 {tag} - PetKit BLE Integration Release
+          
+          {status_emoji} **{release_type.title()} Release** | 🏠 Home Assistant Integration | 📡 Bluetooth Low Energy Control
+          
+          > 🐾 **For pet owners**: Advanced local control of Petkit W4/W5/CTW2 water fountains through Home Assistant
+          
+          ## 📊 Release Metrics
+          
+          | Component | Count | Type | Details |
+          |-----------|-------|------|----------|
+          | **Version** | `{version}` | {release_type.title()} | {'First release' if is_first == 'true' else f'Upgrade from `{prev_tag}`'} |
+          | **Changes** | {commits_count} commits | Code & Docs | {files_count} files modified |
+          | **Code Files** | {len(code_changes)} | Python/YAML | Core functionality updates |
+          | **Documentation** | {len(doc_changes)} | Markdown | User guides and API docs |
+          | **Workflows** | {len(workflow_changes)} | CI/CD | Automation improvements |
+          
+          """
+          
+          # Add change sections
+          if breaking:
+              notes += "\n## ⚠️ Breaking Changes\n\n> 🔥 **Review Required**: These changes may affect existing installations\n\n"
+              for change in breaking:
+                  notes += f"- {change}\n"
+          
+          if features:
+              notes += "\n## ✨ New Features & Capabilities\n\n"
+              for feature in features:
+                  notes += f"- {feature}\n"
+          
+          if performance:
+              notes += "\n## ⚡ Performance & Reliability\n\n> 🎯 **Focus**: Enhanced BLE connectivity and device responsiveness\n\n"
+              for perf in performance:
+                  notes += f"- {perf}\n"
+          
+          if fixes:
+              notes += "\n## 🐛 Bug Fixes & Stability\n\n"
+              for fix in fixes:
+                  notes += f"- {fix}\n"
+          
+          if docs:
+              notes += "\n## 📚 Documentation & Automation\n\n"
+              for doc in docs:
+                  notes += f"- {doc}\n"
+          
+          # Add standard sections
+          notes += f"""
+          
+          ## 🏠 Home Assistant Benefits
+          
+          ### 🔌 Integration Features
+          - **Local BLE Control**: Direct device communication without cloud services
+          - **Real-time Monitoring**: Live status updates for battery, filter, and water levels  
+          - **Smart Automation**: Full HA automation support with device triggers
+          - **Persistent Connection**: Automatic reconnection and error recovery
+          - **Privacy First**: All data stays local - no cloud dependencies
+          
+          ### 🐾 Pet Care Automation
+          - **Hydration Monitoring**: Track daily water consumption patterns
+          - **Maintenance Alerts**: Automated filter and cleaning reminders
+          - **Smart Scheduling**: LED control and DND mode automation
+          - **Health Insights**: Battery monitoring and device health tracking
+          
+          ## 🛠️ Installation Guide
+          
+          ### Quick Start (HACS)
+          ```bash
+          # Add custom repository
+          Repository: https://github.com/pdiegmann/ha-petkit-ble
+          Category: Integration
+          
+          # Install and restart HA
+          # Configure via Integrations page
+          ```
+          
+          ### Manual Installation
+          ```bash
+          # Download and extract
+          wget https://github.com/pdiegmann/ha-petkit-ble/archive/main.zip
+          unzip main.zip
+          
+          # Copy to Home Assistant
+          cp -r custom_components/petkit_ble /config/custom_components/
+          
+          # Restart and configure
+          ```
+          
+          ## 🔧 Supported Hardware
+          
+          | Device Series | Status | Features | Notes |
+          |---------------|--------|----------|-------|
+          | **Petkit W4** | ✅ Full Support | All sensors, controls | Complete feature set |
+          | **Petkit W5** | ✅ Full Support | All sensors, controls | Tested with Eversweet 2 Solo |
+          | **Petkit CTW2** | ✅ Full Support | All sensors, controls | All variants supported |
+          
+          ## 📞 Support & Community
+          
+          ### 🔗 Quick Links
+          - 📈 **[Changelog]({f'https://github.com/pdiegmann/ha-petkit-ble/compare/{prev_tag}...{tag}' if prev_tag else '#'})** - Detailed code changes
+          - 📖 **[Documentation](https://github.com/pdiegmann/ha-petkit-ble#readme)** - Setup and troubleshooting
+          - 🐛 **[Issues](https://github.com/pdiegmann/ha-petkit-ble/issues)** - Bug reports and features
+          - 📦 **[HACS](https://github.com/pdiegmann/ha-petkit-ble)** - Easy installation
+          
+          ### 🌐 Community
+          - 🏠 **[HA Community Forum](https://community.home-assistant.io/)** - General discussions
+          - 💬 **[Discord](https://discord.gg/home-assistant)** - Real-time help
+          - 🔗 **[Reddit](https://reddit.com/r/homeassistant)** - Tips and showcases
+          
+          ---
+          
+          **🌟 Love this integration?** Star the repository and share with fellow pet owners! 🐕🐱
+          
+          *Auto-generated on {datetime.now().strftime('%Y-%m-%d %H:%M UTC')} • Powered by GitHub Actions*
+          """
+          
+          # Save and output
+          with open('detailed_notes.md', 'w') as f:
+              f.write(notes)
+          
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"result<<EOF\n{notes}\nEOF\n")
+          
+          print("✅ Detailed release notes generated")
+          EOF
+          
+          python generate_detailed_notes.py
 
       - name: 🚀 Create Release
         uses: softprops/action-gh-release@v2
-        if: ${{ !steps.release_helper.outputs.release_created }}
+        if: ${{ !steps.release_please.outputs.release_created }}
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "${{ steps.version.outputs.tag }} - PetKit BLE Integration"
-          body: |
-            ${{ steps.ai_notes.outputs.result || steps.release_helper.outputs.body || format('## Release {0}\n\nAutomated release for PetKit W5 BLE MQTT integration.\n\n### Changes\n- {1} commits\n- {2} files modified\n\n**Full Changelog**: https://github.com/pdiegmann/ha-petkit-ble/compare/{3}...{0}', steps.version.outputs.tag, steps.analysis.outputs.commits_count, steps.analysis.outputs.files_changed, steps.analysis.outputs.previous_tag) }}
+          body: ${{ steps.detailed_notes.outputs.result }}
           prerelease: ${{ steps.version.outputs.prerelease }}
           make_latest: ${{ steps.version.outputs.prerelease == 'false' }}
           generate_release_notes: false
+          fail_on_unmatched_files: false
 
       - name: 📊 Workflow Summary
         if: always()

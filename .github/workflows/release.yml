@@ -56,101 +56,235 @@ jobs:
 
       - name: 🧠 Generate AI-Powered Release Notes
         id: ai_release
-        uses: microsoft/AI-Inference@v1
+        uses: peter-murray/workflow-application-token-action@v3
         with:
-          model: gpt-4o-mini
-          prompt: |
-            You are a technical documentation expert specializing in creating professional GitHub release notes. 
-
-            Create comprehensive release notes for version ${{ steps.version.outputs.version }} of the "PetKit W5 BLE MQTT" project - a Python library for controlling Petkit water fountains via Bluetooth Low Energy.
-
-            ## Project Context:
-            - Home Assistant integration for Petkit W5 water fountains
-            - Provides BLE-based local control without cloud dependencies
-            - Focuses on connection reliability and device monitoring
-            - Target audience: Home Assistant users and IoT enthusiasts
-
-            ## Release Information:
-            - Version: ${{ steps.version.outputs.version }}
-            - Previous version: ${{ steps.commits.outputs.previous_tag }}
-            - Commits in this release: ${{ steps.commits.outputs.commits_count }}
-            - Files changed: ${{ steps.commits.outputs.files_changed }}
-            - Commit range: ${{ steps.commits.outputs.commit_range }}
-
-            ## Recent Changes:
-            $(cat commits.txt)
-
-            ## Requirements:
-            1. **Professional Structure**: Use clear sections with emojis for visual appeal
-            2. **Technical Accuracy**: Focus on BLE connectivity, Home Assistant integration, and device control features  
-            3. **User Benefits**: Highlight improvements in reliability, performance, and user experience
-            4. **Breaking Changes**: Clearly mark any breaking changes with ⚠️
-            5. **Installation Notes**: Include relevant installation or upgrade instructions if needed
-            6. **Categories**: Organize changes into logical categories (Features, Bug Fixes, Performance, etc.)
-            7. **Professional Tone**: Technical but accessible, suitable for both developers and end users
-
-            Generate release notes following this structure:
-            ```markdown
-            ## 🚀 Release Highlights
-            [Brief summary of key improvements]
-
-            ### ✨ New Features  
-            [New capabilities and enhancements]
-
-            ### 🐛 Bug Fixes
-            [Issues resolved and stability improvements]
-
-            ### ⚡ Performance & Reliability
-            [Performance optimizations and reliability enhancements]
-
-            ### 🔧 Technical Changes
-            [Developer-focused changes and internal improvements]
-
-            ### 📚 Documentation & Maintenance
-            [Documentation updates and maintenance changes]
-
-            ## 📋 Installation & Upgrade
-
-            [Installation/upgrade instructions if applicable]
-
-            ## 🔗 Links
-            - **Full Changelog**: https://github.com/pdiegmann/ha-petkit-ble/compare/[previous_tag]...${{ steps.version.outputs.tag_name }}
-            - **Documentation**: [Link to relevant docs]
-            - **Issues**: Report bugs at https://github.com/pdiegmann/ha-petkit-ble/issues
-            ```
-
-            Focus on the technical value for Home Assistant users managing Petkit water fountains.
-
-      - name: 📝 Fallback Release Notes
-        id: fallback_notes
-        if: failure() || steps.ai_release.outcome == 'failure'
+          application_id: ${{ secrets.APP_ID }}
+          application_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+        continue-on-error: true
+        
+      - name: 🤖 Create Release Notes with OpenAI
+        id: openai_release
+        if: env.OPENAI_API_KEY != ''
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          cat > release_notes.md << 'EOF'
-          ## 🚀 Release ${{ steps.version.outputs.version }}
-
-          ### 📋 Changes in this Release
+          cat > generate_release_notes.py << 'EOF'
+          import os
+          import openai
+          import json
           
-          $(cat commits.txt)
-
+          # Read commit data
+          with open('commits.txt', 'r') as f:
+              commits = f.read()
+          
+          # Configure OpenAI
+          openai.api_key = os.getenv('OPENAI_API_KEY')
+          
+          prompt = f"""
+          You are a technical documentation expert creating GitHub release notes.
+          
+          Create professional release notes for PetKit W5 BLE MQTT v${{ steps.version.outputs.version }}.
+          
+          Project: Home Assistant integration for Petkit water fountains via Bluetooth Low Energy
+          Audience: Home Assistant users, IoT enthusiasts, pet owners
+          
+          Version: ${{ steps.version.outputs.version }}
+          Previous: ${{ steps.commits.outputs.previous_tag }}
+          Commits: ${{ steps.commits.outputs.commits_count }}
+          Files: ${{ steps.commits.outputs.files_changed }}
+          
+          Recent Changes:
+          {commits}
+          
+          Generate comprehensive release notes with:
+          1. 🚀 Release Highlights (key improvements summary)
+          2. ✨ New Features (new capabilities)
+          3. 🐛 Bug Fixes (issues resolved)
+          4. ⚡ Performance & Reliability (optimizations)
+          5. 🔧 Technical Changes (developer notes)
+          6. 📚 Documentation (updates)
+          7. 🔗 Links (changelog, issues)
+          
+          Use professional tone, clear structure, emojis for visual appeal.
+          Focus on BLE connectivity, device reliability, Home Assistant integration benefits.
+          """
+          
+          try:
+              response = openai.ChatCompletion.create(
+                  model="gpt-3.5-turbo",
+                  messages=[
+                      {"role": "system", "content": "You are a technical documentation expert specializing in IoT and Home Assistant integrations."},
+                      {"role": "user", "content": prompt}
+                  ],
+                  max_tokens=2000,
+                  temperature=0.7
+              )
+              
+              release_notes = response.choices[0].message.content
+              
+              # Save to file
+              with open('ai_release_notes.md', 'w') as f:
+                  f.write(release_notes)
+              
+              # Set output for GitHub Actions
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f"result<<EOF\n{release_notes}\nEOF\n")
+                  
+              print("✅ AI release notes generated successfully")
+              
+          except Exception as e:
+              print(f"❌ OpenAI API failed: {e}")
+              # Fallback to manual template
+              fallback_notes = f"""
+          ## 🚀 Release ${{ steps.version.outputs.version }}
+          
+          ### 📋 Changes in this Release
+          {commits}
+          
           ### 📊 Release Statistics
           - 📦 **Commits**: ${{ steps.commits.outputs.commits_count }}
           - 📁 **Files Changed**: ${{ steps.commits.outputs.files_changed }}
           - 🏷️ **Version**: ${{ steps.version.outputs.version }}
-
+          
           ### 🔗 Links
           - **Full Changelog**: https://github.com/pdiegmann/ha-petkit-ble/compare/${{ steps.commits.outputs.previous_tag }}...${{ steps.version.outputs.tag_name }}
           - **Issues**: https://github.com/pdiegmann/ha-petkit-ble/issues
-
-          ---
-          *This release was automatically generated. For more detailed information, please check the commit history.*
+          """
+              
+              with open('ai_release_notes.md', 'w') as f:
+                  f.write(fallback_notes)
+              
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+                  f.write(f"result<<EOF\n{fallback_notes}\nEOF\n")
           EOF
+          
+          python generate_release_notes.py
+
+      - name: 📝 Enhanced Release Notes Generation
+        id: enhanced_notes
+        if: steps.openai_release.outcome != 'success'
+        run: |
+          # Create comprehensive release notes using commit analysis
+          cat > enhanced_release_notes.py << 'EOF'
+          import re
+          import os
+          
+          # Read commits
+          with open('commits.txt', 'r') as f:
+              commits_content = f.read()
+          
+          # Categorize commits
+          features = []
+          fixes = []
+          performance = []
+          docs = []
+          other = []
+          
+          for line in commits_content.split('\n'):
+              if line.strip():
+                  line_lower = line.lower()
+                  if any(word in line_lower for word in ['feat', 'add', 'new', 'implement']):
+                      features.append(line)
+                  elif any(word in line_lower for word in ['fix', 'bug', 'issue', 'resolve']):
+                      fixes.append(line)
+                  elif any(word in line_lower for word in ['perf', 'optim', 'improve', 'enhance', 'speed']):
+                      performance.append(line)
+                  elif any(word in line_lower for word in ['doc', 'readme', 'guide']):
+                      docs.append(line)
+                  else:
+                      other.append(line)
+          
+          # Generate structured release notes
+          release_notes = f"""
+          ## 🚀 Release ${{ steps.version.outputs.version }} - PetKit BLE Integration
+          
+          Professional Home Assistant integration for Petkit W5 water fountains via Bluetooth Low Energy.
+          
+          ### 📊 Release Overview
+          - **Version**: ${{ steps.version.outputs.version }}
+          - **Previous Release**: ${{ steps.commits.outputs.previous_tag }}
+          - **Commits**: ${{ steps.commits.outputs.commits_count }} changes
+          - **Files Modified**: ${{ steps.commits.outputs.files_changed }} files
+          
+          """
+          
+          if features:
+              release_notes += "\n### ✨ New Features & Enhancements\n"
+              for feature in features:
+                  release_notes += f"- {feature}\n"
+          
+          if fixes:
+              release_notes += "\n### 🐛 Bug Fixes & Stability\n"
+              for fix in fixes:
+                  release_notes += f"- {fix}\n"
+          
+          if performance:
+              release_notes += "\n### ⚡ Performance & Reliability\n"
+              for perf in performance:
+                  release_notes += f"- {perf}\n"
+          
+          if docs:
+              release_notes += "\n### 📚 Documentation & Maintenance\n"
+              for doc in docs:
+                  release_notes += f"- {doc}\n"
+          
+          if other:
+              release_notes += "\n### 🔧 Other Changes\n"
+              for change in other:
+                  release_notes += f"- {change}\n"
+          
+          release_notes += f"""
+          
+          ### 🏠 Home Assistant Integration Benefits
+          - **Local Control**: No cloud dependencies for device management
+          - **Real-time Monitoring**: Live status updates and device health
+          - **Automation Ready**: Full integration with HA automations
+          - **Reliability Focus**: Robust BLE connection management
+          
+          ### 📦 Installation & Upgrade
+          
+          **Via HACS (Recommended):**
+          1. Add custom repository: `https://github.com/pdiegmann/ha-petkit-ble`
+          2. Install "PetKit BLE Water Fountain" integration
+          3. Restart Home Assistant
+          4. Configure via Integrations page
+          
+          **Manual Installation:**
+          1. Copy `custom_components/petkit_ble` to your HA custom_components directory
+          2. Restart Home Assistant
+          3. Add integration via Configuration → Integrations
+          
+          ### 🔗 Resources
+          - **Full Changelog**: https://github.com/pdiegmann/ha-petkit-ble/compare/${{ steps.commits.outputs.previous_tag }}...${{ steps.version.outputs.tag_name }}
+          - **Documentation**: https://github.com/pdiegmann/ha-petkit-ble#readme
+          - **Issues & Support**: https://github.com/pdiegmann/ha-petkit-ble/issues
+          - **HACS**: https://github.com/pdiegmann/ha-petkit-ble
+          
+          ### 🐾 About PetKit BLE Integration
+          Control your Petkit W5 series water fountains directly through Home Assistant using Bluetooth Low Energy. Monitor battery levels, control LED settings, track filter life, and automate your pet's hydration system - all locally without cloud dependencies.
+          
+          **Supported devices**: Petkit W4/W5/CTW2 series water fountains
+          """
+          
+          # Save release notes
+          with open('enhanced_release_notes.md', 'w') as f:
+              f.write(release_notes)
+          
+          # Output for GitHub Actions
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"result<<EOF\n{release_notes}\nEOF\n")
+          
+          print("✅ Enhanced release notes generated")
+          EOF
+          
+          python enhanced_release_notes.py
 
       - name: 🚀 Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ steps.version.outputs.tag_name }}
           name: "${{ steps.version.outputs.tag_name }} - PetKit BLE Integration Release"
-          body: ${{ steps.ai_release.outputs.result || steps.fallback_notes.outputs.content }}
+          body: ${{ steps.openai_release.outputs.result || steps.enhanced_notes.outputs.result }}
           prerelease: ${{ steps.version.outputs.is_prerelease }}
           generateReleaseNotes: false  # We use AI-generated notes instead
           allowUpdates: true
