@@ -82,12 +82,12 @@ class HABluetoothAdapter:
                 self.logger.error(f"Device {address} not found in HA bluetooth")
                 return False
             
-            # Establish connection using HA's bluetooth client
+            # Use bleak-retry-connector directly with the BLE device
+            from bleak import BleakClient
             self._client = await establish_connection(
-                bluetooth.BluetoothClient,
+                BleakClient,
                 self._ble_device,
                 address,
-                lambda: bluetooth.BluetoothClient(self._ble_device, "petkit_ble"),
                 timeout=30.0
             )
             
