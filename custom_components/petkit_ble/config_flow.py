@@ -36,14 +36,18 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(format_mac(address))
             self._abort_if_unique_id_configured()
 
-            # Validate the device can be connected to using HA's bluetooth
-            if await self._test_connection(address):
-                return self.async_create_entry(
-                    title=f"Petkit Water Fountain ({address})",
-                    data={CONF_ADDRESS: address},
+            # Test connection if possible, but allow configuration even if test fails
+            connection_tested = await self._test_connection(address)
+            if not connection_tested:
+                _LOGGER.warning(
+                    f"Could not verify connection to {address}, but allowing configuration. "
+                    "Device may not be in range or powered on."
                 )
-            else:
-                errors["base"] = "cannot_connect"
+            
+            return self.async_create_entry(
+                title=f"Petkit Water Fountain ({address})",
+                data={CONF_ADDRESS: address},
+            )
 
         # Get devices from HA's bluetooth discovery
         discovered_devices = await self._get_discovered_devices()
@@ -97,13 +101,18 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             address = self.context["title_placeholders"]["address"]
             
-            if await self._test_connection(address):
-                return self.async_create_entry(
-                    title=f"Petkit Water Fountain ({address})",
-                    data={CONF_ADDRESS: address},
+            # Test connection if possible, but allow configuration even if test fails
+            connection_tested = await self._test_connection(address)
+            if not connection_tested:
+                _LOGGER.warning(
+                    f"Could not verify connection to {address}, but allowing configuration. "
+                    "Device may not be in range or powered on."
                 )
-            else:
-                return self.async_abort(reason="cannot_connect")
+            
+            return self.async_create_entry(
+                title=f"Petkit Water Fountain ({address})",
+                data={CONF_ADDRESS: address},
+            )
 
         return self.async_show_form(
             step_id="bluetooth_confirm",
@@ -133,6 +142,11 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def _test_connection(self, address: str) -> bool:
         """Test if we can connect to the device using HA's bluetooth."""
         try:
+            # Check if device is present in HA's bluetooth discovery
+            if not bluetooth.async_address_present(self.hass, address, connectable=True):
+                _LOGGER.error(f"Device {address} not present in HA bluetooth")
+                return False
+            
             # Get BLE device from HA's bluetooth integration
             ble_device = bluetooth.async_ble_device_from_address(
                 self.hass, address, connectable=True
@@ -142,12 +156,9 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.error(f"Device {address} not found in HA bluetooth")
                 return False
             
-            # Test connection using HA's bluetooth client
-            async with bluetooth.BluetoothClient(ble_device, "petkit_ble") as client:
-                await client.connect()
-                # Connection successful, disconnect immediately
-                await client.disconnect()
-                return True
+            # Device is discoverable and has a BLE device object, consider it connectable
+            _LOGGER.info(f"Device {address} is available for connection")
+            return True
             
         except Exception as err:
             _LOGGER.error("Error testing connection to %s: %s", address, err)
