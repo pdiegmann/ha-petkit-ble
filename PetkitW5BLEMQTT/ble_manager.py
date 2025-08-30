@@ -33,6 +33,10 @@ class BLEManager:
         self._last_connection_attempt = None
         self._connection_error = None
         self._last_logged_status = None  # Track last logged status to prevent spam
+        self._max_connection_attempts = 20  # Increased from default
+        self._max_retry_delay = 30.0  # Maximum retry delay
+        self._last_reset_time = time.time()
+        self._reset_interval = 300.0  # Reset connection attempts every 5 minutes
         
         # Persistent connection management
         self._target_address = None
@@ -284,21 +288,36 @@ class BLEManager:
         """Continuously monitor connection and reconnect instantly when needed."""
         while self._should_maintain_connection and not self._stop_event.is_set():
             try:
+                # Auto-reset connection attempts if enough time has passed
+                current_time = time.time()
+                if (current_time - self._last_reset_time) >= self._reset_interval:
+                    if self._connection_attempts >= self._max_connection_attempts:
+                        self.logger.info(f"Auto-resetting connection attempts after {self._reset_interval}s timeout")
+                        self._connection_attempts = 0
+                        self._last_reset_time = current_time
+                        if self._connection_status == ConnectionStatus.FAILED:
+                            self._connection_status = ConnectionStatus.DISCONNECTED
+                
                 # Check if we're connected
                 if self._target_address not in self.connected_devices:
-                    self.logger.info("Connection lost, attempting instant reconnection...")
-                    
-                    # Try to reconnect immediately
-                    success = await self.connect_device(self._target_address, start_monitoring=False)
-                    
-                    if not success:
-                        # If immediate reconnection fails, try again after very short delay
-                        await asyncio.sleep(0.1)
-                        continue
+                    # Only attempt reconnection if we haven't exceeded max attempts
+                    if self._connection_attempts < self._max_connection_attempts:
+                        self.logger.info("Connection lost, attempting instant reconnection...")
+                        
+                        # Try to reconnect immediately
+                        success = await self.connect_device(self._target_address, start_monitoring=False)
+                        
+                        if not success:
+                            # If immediate reconnection fails, try again after very short delay
+                            await asyncio.sleep(0.1)
+                            continue
+                        else:
+                            self.logger.info("Reconnection successful")
+                            self._connection_attempts = 0  # Reset on successful connection
+                            self._connection_lost_event.clear()
                     else:
-                        self.logger.info("Reconnection successful")
-                        self._connection_attempts = 0  # Reset on successful connection
-                        self._connection_lost_event.clear()
+                        # Too many failed attempts, wait longer
+                        await asyncio.sleep(5.0)
                 
                 # Check connection health
                 elif self._target_address in self.connected_devices:
@@ -329,6 +348,7 @@ class BLEManager:
         self._connection_error = None
         self._last_connection_attempt = None
         self._last_logged_status = None
+        self._last_reset_time = time.time()
         self._connection_lost_event.clear()
         self._stop_event.clear()
 

@@ -46,9 +46,11 @@ class HABluetoothAdapter:
         self._last_connection_attempt = None
         self._connection_error = None
         self._retry_delay = 1.0  # Start with 1 second delay
-        self._max_retry_delay = 60.0  # Maximum retry delay
-        self._max_connection_attempts = 10
+        self._max_retry_delay = 30.0  # Maximum retry delay (reduced from 60s)
+        self._max_connection_attempts = 20  # Increased from 10 to 20
         self._last_logged_status = None  # Track last logged status to prevent spam
+        self._last_reset_time = time.time()
+        self._reset_interval = 300.0  # Reset connection attempts every 5 minutes
 
     async def scan(self) -> dict[str, Any]:
         """Scan for Petkit BLE devices using HA's bluetooth integration."""
@@ -359,6 +361,18 @@ class HABluetoothAdapter:
     
     def _should_attempt_retry(self):
         """Check if we should attempt another retry."""
+        # Auto-reset connection attempts if enough time has passed
+        current_time = time.time()
+        if (current_time - self._last_reset_time) >= self._reset_interval:
+            if self._connection_attempts >= self._max_connection_attempts:
+                self.logger.info(f"Auto-resetting connection attempts after {self._reset_interval}s timeout")
+                self._connection_attempts = 0
+                self._retry_delay = 1.0
+                self._last_reset_time = current_time
+                # Only reset to RECONNECTING if we were FAILED, otherwise keep current status
+                if self._connection_status == ConnectionStatus.FAILED:
+                    self._connection_status = ConnectionStatus.DISCONNECTED
+        
         return self._connection_attempts < self._max_connection_attempts
     
     def reset_connection_state(self):
@@ -369,3 +383,4 @@ class HABluetoothAdapter:
         self._connection_error = None
         self._last_connection_attempt = None
         self._last_logged_status = None
+        self._last_reset_time = time.time()
