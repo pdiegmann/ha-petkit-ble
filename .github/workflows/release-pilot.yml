@@ -1,0 +1,89 @@
+name: 🤖 ReleasePilot AI-Powered Release Automation
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  ai-release:
+    runs-on: ubuntu-latest
+    name: 🚀 AI-Powered Release Generation
+    
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: 🤖 Generate Release with ReleasePilot
+        uses: ReleasePilot/action@v1
+        with:
+          # GitHub Token for API access
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          
+          # AI Model Configuration
+          ai-provider: "openai"
+          ai-model: "gpt-4o-mini"
+          
+          # Release Configuration
+          tag-name: ${{ github.ref_name }}
+          release-title: "${{ github.ref_name }} - PetKit BLE Integration Release"
+          
+          # AI Prompt Template
+          ai-prompt: |
+            Create comprehensive release notes for PetKit W5 BLE MQTT v{version}.
+            
+            This is a Home Assistant integration providing:
+            - Bluetooth Low Energy control for Petkit water fountains
+            - Local device management without cloud dependencies  
+            - Real-time monitoring and automation capabilities
+            - Connection reliability and device status tracking
+            
+            Target audience: Home Assistant users, IoT enthusiasts, pet owners with smart devices.
+            
+            Generate professional release notes with:
+            1. 🚀 Release highlights and key improvements
+            2. ✨ New features and capabilities
+            3. 🐛 Bug fixes and stability improvements  
+            4. ⚡ Performance optimizations
+            5. 🔧 Technical changes and developer notes
+            6. 📚 Documentation updates
+            7. 🔗 Relevant links and resources
+            
+            Use clear sections, emojis for visual appeal, and focus on user benefits.
+            Highlight any breaking changes with ⚠️ warnings.
+            Include installation/upgrade guidance where relevant.
+            
+            Make it technical but accessible for Home Assistant community.
+          
+          # Change Detection
+          include-commits: true
+          include-diff: true
+          commit-limit: 100
+          
+          # Release Settings  
+          draft: false
+          prerelease: auto  # Auto-detect based on version format
+          
+          # Additional Context
+          repository-context: |
+            Repository: PetKit W5 BLE MQTT Integration
+            Platform: Home Assistant / Python
+            License: MIT
+            Main Focus: IoT device control, BLE communication, pet automation
+            
+      - name: 📋 Release Summary
+        if: always()
+        run: |
+          echo "## 🎉 AI Release Generation Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Repository**: pdiegmann/ha-petkit-ble" >> $GITHUB_STEP_SUMMARY
+          echo "**AI Model**: gpt-4o-mini" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 **View Release**: https://github.com/pdiegmann/ha-petkit-ble/releases/tag/${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY

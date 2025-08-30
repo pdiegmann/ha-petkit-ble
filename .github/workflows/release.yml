@@ -1,0 +1,169 @@
+name: 🚀 Automated Release with AI-Generated Changelog
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on version tags like v1.0.0, v0.1.18, etc.
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    name: 🤖 Create AI-Generated Release
+    
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for comprehensive changelog
+      
+      - name: 🏷️ Extract Version Info
+        id: version
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG_NAME#v}
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "is_prerelease=$(if [[ $VERSION =~ -[a-zA-Z] ]]; then echo true; else echo false; fi)" >> $GITHUB_OUTPUT
+      
+      - name: 📊 Generate Commit Analysis
+        id: commits
+        run: |
+          # Get previous tag for comparison
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^${{ steps.version.outputs.tag_name }}$" | head -n 1)
+          if [ -z "$PREVIOUS_TAG" ]; then
+            PREVIOUS_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+          
+          echo "previous_tag=$PREVIOUS_TAG" >> $GITHUB_OUTPUT
+          
+          # Generate commit summary
+          COMMIT_RANGE="$PREVIOUS_TAG..${{ steps.version.outputs.tag_name }}"
+          echo "commit_range=$COMMIT_RANGE" >> $GITHUB_OUTPUT
+          
+          # Get detailed commit information
+          git log --pretty=format:"- **%s** (%h) by %an%n  %b" $COMMIT_RANGE > commits.txt || echo "- Initial release" > commits.txt
+          
+          # Count changes
+          FILES_CHANGED=$(git diff --name-only $PREVIOUS_TAG..${{ steps.version.outputs.tag_name }} | wc -l || echo "0")
+          COMMITS_COUNT=$(git rev-list --count $COMMIT_RANGE || echo "1")
+          
+          echo "files_changed=$FILES_CHANGED" >> $GITHUB_OUTPUT
+          echo "commits_count=$COMMITS_COUNT" >> $GITHUB_OUTPUT
+
+      - name: 🧠 Generate AI-Powered Release Notes
+        id: ai_release
+        uses: microsoft/AI-Inference@v1
+        with:
+          model: gpt-4o-mini
+          prompt: |
+            You are a technical documentation expert specializing in creating professional GitHub release notes. 
+
+            Create comprehensive release notes for version ${{ steps.version.outputs.version }} of the "PetKit W5 BLE MQTT" project - a Python library for controlling Petkit water fountains via Bluetooth Low Energy.
+
+            ## Project Context:
+            - Home Assistant integration for Petkit W5 water fountains
+            - Provides BLE-based local control without cloud dependencies
+            - Focuses on connection reliability and device monitoring
+            - Target audience: Home Assistant users and IoT enthusiasts
+
+            ## Release Information:
+            - Version: ${{ steps.version.outputs.version }}
+            - Previous version: ${{ steps.commits.outputs.previous_tag }}
+            - Commits in this release: ${{ steps.commits.outputs.commits_count }}
+            - Files changed: ${{ steps.commits.outputs.files_changed }}
+            - Commit range: ${{ steps.commits.outputs.commit_range }}
+
+            ## Recent Changes:
+            $(cat commits.txt)
+
+            ## Requirements:
+            1. **Professional Structure**: Use clear sections with emojis for visual appeal
+            2. **Technical Accuracy**: Focus on BLE connectivity, Home Assistant integration, and device control features  
+            3. **User Benefits**: Highlight improvements in reliability, performance, and user experience
+            4. **Breaking Changes**: Clearly mark any breaking changes with ⚠️
+            5. **Installation Notes**: Include relevant installation or upgrade instructions if needed
+            6. **Categories**: Organize changes into logical categories (Features, Bug Fixes, Performance, etc.)
+            7. **Professional Tone**: Technical but accessible, suitable for both developers and end users
+
+            Generate release notes following this structure:
+            ```markdown
+            ## 🚀 Release Highlights
+            [Brief summary of key improvements]
+
+            ### ✨ New Features  
+            [New capabilities and enhancements]
+
+            ### 🐛 Bug Fixes
+            [Issues resolved and stability improvements]
+
+            ### ⚡ Performance & Reliability
+            [Performance optimizations and reliability enhancements]
+
+            ### 🔧 Technical Changes
+            [Developer-focused changes and internal improvements]
+
+            ### 📚 Documentation & Maintenance
+            [Documentation updates and maintenance changes]
+
+            ## 📋 Installation & Upgrade
+
+            [Installation/upgrade instructions if applicable]
+
+            ## 🔗 Links
+            - **Full Changelog**: https://github.com/pdiegmann/ha-petkit-ble/compare/[previous_tag]...${{ steps.version.outputs.tag_name }}
+            - **Documentation**: [Link to relevant docs]
+            - **Issues**: Report bugs at https://github.com/pdiegmann/ha-petkit-ble/issues
+            ```
+
+            Focus on the technical value for Home Assistant users managing Petkit water fountains.
+
+      - name: 📝 Fallback Release Notes
+        id: fallback_notes
+        if: failure() || steps.ai_release.outcome == 'failure'
+        run: |
+          cat > release_notes.md << 'EOF'
+          ## 🚀 Release ${{ steps.version.outputs.version }}
+
+          ### 📋 Changes in this Release
+          
+          $(cat commits.txt)
+
+          ### 📊 Release Statistics
+          - 📦 **Commits**: ${{ steps.commits.outputs.commits_count }}
+          - 📁 **Files Changed**: ${{ steps.commits.outputs.files_changed }}
+          - 🏷️ **Version**: ${{ steps.version.outputs.version }}
+
+          ### 🔗 Links
+          - **Full Changelog**: https://github.com/pdiegmann/ha-petkit-ble/compare/${{ steps.commits.outputs.previous_tag }}...${{ steps.version.outputs.tag_name }}
+          - **Issues**: https://github.com/pdiegmann/ha-petkit-ble/issues
+
+          ---
+          *This release was automatically generated. For more detailed information, please check the commit history.*
+          EOF
+
+      - name: 🚀 Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.version.outputs.tag_name }}
+          name: "${{ steps.version.outputs.tag_name }} - PetKit BLE Integration Release"
+          body: ${{ steps.ai_release.outputs.result || steps.fallback_notes.outputs.content }}
+          prerelease: ${{ steps.version.outputs.is_prerelease }}
+          generateReleaseNotes: false  # We use AI-generated notes instead
+          allowUpdates: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📢 Release Summary
+        run: |
+          echo "## 🎉 Release Created Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag**: ${{ steps.version.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commits**: ${{ steps.commits.outputs.commits_count }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Files Changed**: ${{ steps.commits.outputs.files_changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Pre-release**: ${{ steps.version.outputs.is_prerelease }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 **Release URL**: https://github.com/pdiegmann/ha-petkit-ble/releases/tag/${{ steps.version.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
