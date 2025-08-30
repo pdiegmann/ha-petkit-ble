@@ -4,12 +4,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import datetime
 from enum import Enum
 from typing import Any, Callable
 
 from bleak_retry_connector import establish_connection
 from homeassistant.components import bluetooth
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util, callback
 from homeassistant.helpers.device_registry import format_mac
 
 _LOGGER = logging.getLogger(__name__)
@@ -359,7 +361,7 @@ class HABluetoothAdapter:
     
     def _update_last_seen(self):
         """Update last seen timestamp."""
-        self._last_seen = time.time()
+        self._last_seen = dt_util.now().isoformat()
     
     def _calculate_retry_delay(self):
         """Calculate exponential backoff delay."""

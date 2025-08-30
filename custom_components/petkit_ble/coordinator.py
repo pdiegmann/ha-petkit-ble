@@ -261,12 +261,17 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             except asyncio.CancelledError:
                 pass
         
-        if self._initialization_task:
+        if self._initialization_task and not self._initialization_task.done():
             self._initialization_task.cancel()
             try:
                 await self._initialization_task
             except asyncio.CancelledError:
                 pass
+            except Exception as e:
+                _LOGGER.debug(f"Error cleaning up initialization task: {e}")
+        elif self._initialization_task and self._initialization_task.done():
+            # Task is already done, no need to await
+            pass
                 
         # Stop notifications and disconnect
         if self.address in self.ble_manager.connected_devices:
