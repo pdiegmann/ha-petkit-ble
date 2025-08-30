@@ -127,8 +127,8 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
 
     async def async_start(self) -> None:
         """Start the coordinator and immediately initialize connection."""
-        # Start the base coordinator first
-        await super().async_start()
+        # Start the base coordinator first (not async in ActiveBluetoothProcessorCoordinator)
+        super().async_start()
         
         # Immediately attempt device initialization regardless of BT discovery
         if not self._initialized:

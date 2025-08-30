@@ -192,16 +192,23 @@ class HABluetoothAdapter:
         try:
             if address in self.connected_devices:
                 client = self.connected_devices[address]
+                # Check if client is still connected before attempting write
+                if hasattr(client, 'is_connected') and not client.is_connected:
+                    self.logger.warning(f"Client for {address} reports not connected, cleaning up...")
+                    del self.connected_devices[address]
+                    self._update_connection_status(ConnectionStatus.RECONNECTING, "Client disconnected during write")
+                    return False
+                    
                 await client.write_gatt_char(characteristic_uuid, data)
-                self.logger.info(f"Write complete to {characteristic_uuid}")
+                self.logger.debug(f"Write complete to {characteristic_uuid}")
                 self._update_last_seen()
                 return True
             else:
-                self.logger.error(f"Device {address} not connected")
+                self.logger.debug(f"Device {address} not connected for write operation")
                 return False
         except Exception as err:
             error_msg = f"Write failed: {err}"
-            self.logger.error(f"Error writing to characteristic {characteristic_uuid}: {err}")
+            self.logger.warning(f"Error writing to characteristic {characteristic_uuid}: {err}")
             # Mark as disconnected so reconnection will be attempted
             if address in self.connected_devices:
                 del self.connected_devices[address]
