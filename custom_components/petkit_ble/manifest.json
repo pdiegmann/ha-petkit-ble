@@ -1,6 +1,11 @@
 {
   "domain": "petkit_ble",
   "name": "Petkit BLE Water Fountain",
+  "bluetooth": [
+    {
+      "connectable": true
+    }
+  ],
   "codeowners": ["@pdiegmann"],
   "config_flow": true,
   "dependencies": ["bluetooth_adapters"],
@@ -9,10 +14,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/pdiegmann/ha-petkit-ble/issues",
   "requirements": ["bleak==0.20.2", "bleak-retry-connector>=3.0.0"],
-  "version": "1.0.0",
-  "bluetooth": [
-    {
-      "connectable": true
-    }
-  ]
+  "version": "1.0.0"
 }
