@@ -6,7 +6,7 @@ This document summarizes the key changes made to integrate the Petkit BLE compon
 
 ### 1. Manifest Updates (`manifest.json`)
 - Added `"dependencies": ["bluetooth_adapters"]` for multi-dongle support
-- Added `"requirements": ["bleak==0.20.2", "bleak-retry-connector>=3.0.0"]`
+- Added `"requirements": ["bleak>=1.1.0", "bleak-retry-connector>=3.0.0"]`
 - Added `"bluetooth": [{"connectable": true}]` to declare Bluetooth usage
 
 ### 2. Home Assistant Bluetooth Adapter (`ha_bluetooth_adapter.py`)
