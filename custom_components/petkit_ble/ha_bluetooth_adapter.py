@@ -65,13 +65,13 @@ class HABluetoothAdapter:
                 ):
                     # Create a mock device object compatible with existing library
                     # Convert service_data to the format expected by the library
-                    service_data_bytes = []
+                    # The combine_byte_arrays function expects a dict with .values()
+                    service_data_dict = {}
                     if service_info.service_data:
-                        for uuid, data in service_info.service_data.items():
-                            if isinstance(data, bytes):
-                                service_data_bytes.extend(data)
-                            elif isinstance(data, list):
-                                service_data_bytes.extend(data)
+                        service_data_dict = service_info.service_data
+                    else:
+                        # Default service data with device type identifier for W5
+                        service_data_dict = {"default": [0, 0, 0, 0, 0, 206]}  # 206 = W5 device type
                     
                     mock_device = type('MockDevice', (), {
                         'name': service_info.name,
@@ -80,7 +80,7 @@ class HABluetoothAdapter:
                         'details': {
                             'props': {
                                 'RSSI': service_info.rssi,
-                                'ServiceData': service_data_bytes or [0, 0, 0, 0, 0, 14]  # Default with device type 14
+                                'ServiceData': service_data_dict
                             }
                         }
                     })()
