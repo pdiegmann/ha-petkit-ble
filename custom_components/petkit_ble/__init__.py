@@ -32,17 +32,14 @@ SERVICE_SET_DEVICE_CONFIG_SCHEMA = vol.Schema({
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Petkit BLE from a config entry."""
     coordinator = PetkitBLECoordinator(hass, entry)
-    
-    try:
-        await coordinator.async_config_entry_first_refresh()
-    except UpdateFailed as err:
-        _LOGGER.error("Unable to connect to Petkit device: %s", err)
-        return False
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    
+    # Start the coordinator (this replaces async_config_entry_first_refresh for ActiveBluetoothProcessorCoordinator)
+    entry.async_on_unload(coordinator.async_start())
 
     # Register services
     async def handle_reset_filter(call: ServiceCall) -> None:
