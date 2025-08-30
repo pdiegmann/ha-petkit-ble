@@ -219,7 +219,14 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
                 self.device.type_code = 14
             
             _LOGGER.info("Initializing device connection...")
-            await self.commands.init_device_connection()
+            try:
+                await asyncio.wait_for(self.commands.init_device_connection(), timeout=30.0)
+                _LOGGER.info(f"init_device_connection completed successfully")
+            except asyncio.TimeoutError:
+                _LOGGER.warning("init_device_connection timed out after 30 seconds, but continuing...")
+            except Exception as e:
+                _LOGGER.error(f"Error in init_device_connection: {e}", exc_info=True)
+                _LOGGER.warning("Continuing despite init_device_connection error...")
             
             _LOGGER.info(f"After init_device_connection: device.serial='{self.device.serial}', device.name='{self.device.name}'")
             
