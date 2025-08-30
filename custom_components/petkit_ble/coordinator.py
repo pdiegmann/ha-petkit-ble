@@ -190,6 +190,20 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             _LOGGER.debug("Waiting for BLE stack to stabilize...")
             await asyncio.sleep(1.0)  # Increased to 1 second for better stability
             
+            # Verify client is actually ready for writes
+            client = self.ble_manager.connected_devices.get(self.address)
+            if client and hasattr(client, 'is_connected'):
+                retry_count = 0
+                while not client.is_connected and retry_count < 5:
+                    _LOGGER.debug(f"Client not ready, waiting... (attempt {retry_count + 1}/5)")
+                    await asyncio.sleep(0.2)
+                    retry_count += 1
+                    
+                if not client.is_connected:
+                    raise UpdateFailed("Client not ready after 5 attempts")
+                    
+                _LOGGER.debug("Client verified ready for communication")
+            
             # Initialize device data and connection using existing logic
             # Check if we have connection data before trying to initialize device data
             if self.address in self.ble_manager.connectiondata:
