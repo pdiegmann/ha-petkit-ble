@@ -82,9 +82,9 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         async def _async_poll(service_info: bluetooth.BluetoothServiceInfoBleak) -> PetkitBLEData:
             """Poll the device for updated data."""
             try:
-                # Device should already be initialized via _async_setup
+                # Initialize device on first poll if not already done
                 if not self._initialized:
-                    _LOGGER.warning("Device not initialized during poll, attempting initialization")
+                    _LOGGER.info("Device not initialized during poll, attempting initialization")
                     await self._initialize_device()
                     
                 # Get fresh device data using existing commands
@@ -123,6 +123,40 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         self._consumer_task = None
         self._initialized = False
         self._listeners: set = set()
+        self._initialization_task = None
+
+    async def async_start(self) -> None:
+        """Start the coordinator and immediately initialize connection."""
+        # Start the base coordinator first
+        await super().async_start()
+        
+        # Immediately attempt device initialization regardless of BT discovery
+        if not self._initialized:
+            self._initialization_task = asyncio.create_task(self._initialization_loop())
+        
+    async def _initialization_loop(self) -> None:
+        """Continuously attempt device initialization until successful."""
+        retry_count = 0
+        max_retries = 50  # Try for a while before giving up
+        
+        while not self._initialized and retry_count < max_retries:
+            try:
+                _LOGGER.info(f"Initialization attempt {retry_count + 1}/{max_retries}")
+                await self._initialize_device()
+                if self._initialized:
+                    break
+            except Exception as err:
+                _LOGGER.warning(f"Initialization attempt {retry_count + 1} failed: {err}")
+                
+            retry_count += 1
+            if retry_count < max_retries:
+                # Wait with exponential backoff (max 60s)
+                delay = min(5 * (2 ** min(retry_count // 3, 3)), 60)
+                _LOGGER.info(f"Waiting {delay}s before next initialization attempt...")
+                await asyncio.sleep(delay)
+        
+        if not self._initialized:
+            _LOGGER.error(f"Device initialization failed after {max_retries} attempts")
 
     async def _async_setup(self) -> None:
         """Set up the coordinator during first refresh."""
@@ -131,24 +165,31 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
     async def _initialize_device(self) -> None:
         """Initialize the BLE connection and device."""
         try:
+            _LOGGER.info(f"Initializing BLE connection to device {self.address}")
+            
             # Scan for devices first to populate connectiondata
+            _LOGGER.info("Scanning for Petkit devices...")
             await self.ble_manager.scan()
             
             # Connect to the specific device using HA Bluetooth
+            _LOGGER.info(f"Attempting to connect to device {self.address}")
             if not await self.ble_manager.connect_device(self.address):
                 raise UpdateFailed(f"Could not connect to device {self.address}")
             
             # Start message consumer
+            _LOGGER.info("Starting message consumer...")
             self._consumer_task = asyncio.create_task(
                 self.ble_manager.message_consumer(self.address, Constants.WRITE_UUID)
             )
             
             # Start notifications for device updates
+            _LOGGER.info("Starting BLE notifications...")
             await self.ble_manager.start_notifications(self.address, Constants.READ_UUID)
             
             # Initialize device data and connection using existing logic
             # Check if we have connection data before trying to initialize device data
             if self.address in self.ble_manager.connectiondata:
+                _LOGGER.info("Using discovered connection data for device initialization")
                 self.commands.init_device_data()
             else:
                 _LOGGER.warning(f"No connection data for {self.address}, using defaults")
@@ -159,25 +200,27 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
                 self.device.device_type = 14  # Default device type for W5
                 self.device.type_code = 14
             
+            _LOGGER.info("Initializing device connection...")
             await self.commands.init_device_connection()
             
             # Wait for device to be fully initialized
             retry_count = 0
             while self.device.serial == "Uninitialized" and retry_count < 10:
-                _LOGGER.info("Device not initialized yet, waiting...")
+                _LOGGER.info(f"Device not initialized yet, waiting... (attempt {retry_count + 1}/10)")
                 await asyncio.sleep(1)
                 retry_count += 1
                 
             if self.device.serial == "Uninitialized":
-                raise UpdateFailed("Device initialization timed out")
+                raise UpdateFailed("Device initialization timed out after 10 seconds")
             
             self._initialized = True
-            _LOGGER.info("Device initialized successfully")
+            _LOGGER.info(f"Device initialized successfully: {self.device.serial}")
             
         except Exception as err:
             _LOGGER.error("Device initialization failed: %s", err)
             await self._cleanup()
-            raise UpdateFailed(f"Device initialization failed: {err}") from err
+            # Don't raise here - let the system retry later
+            # This prevents the integration from failing completely on startup
 
     async def async_shutdown(self) -> None:
         """Shutdown the coordinator and cleanup resources."""
@@ -189,6 +232,13 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             self._consumer_task.cancel()
             try:
                 await self._consumer_task
+            except asyncio.CancelledError:
+                pass
+        
+        if self._initialization_task:
+            self._initialization_task.cancel()
+            try:
+                await self._initialization_task
             except asyncio.CancelledError:
                 pass
                 
