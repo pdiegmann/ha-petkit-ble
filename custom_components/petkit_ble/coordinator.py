@@ -188,7 +188,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             
             # Allow BLE stack to stabilize after connection
             _LOGGER.debug("Waiting for BLE stack to stabilize...")
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)  # Increased to 1 second for better stability
             
             # Initialize device data and connection using existing logic
             # Check if we have connection data before trying to initialize device data
