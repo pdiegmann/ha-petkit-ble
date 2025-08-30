@@ -1,0 +1,41 @@
+reset_filter:
+  name: Reset filter
+  description: Reset the water filter life indicator
+  target:
+    device:
+      integration: petkit_ble
+
+set_device_config:
+  name: Set device configuration  
+  description: Configure device settings like LED brightness and smart mode timing
+  target:
+    device:
+      integration: petkit_ble
+  fields:
+    smart_time_on:
+      name: Smart mode on time
+      description: Minutes for smart mode on duration
+      example: 30
+      selector:
+        number:
+          min: 1
+          max: 1440
+          unit_of_measurement: minutes
+    smart_time_off:
+      name: Smart mode off time
+      description: Minutes for smart mode off duration
+      example: 60
+      selector:
+        number:
+          min: 1
+          max: 1440
+          unit_of_measurement: minutes
+    led_brightness:
+      name: LED brightness
+      description: LED brightness level (0-100)
+      example: 80
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"

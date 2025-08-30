@@ -1,0 +1,27 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Setup Petkit BLE Water Fountain",
+        "description": "Select your Petkit water fountain device from the discovered BLE devices.",
+        "data": {
+          "address": "Device"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "Confirm Petkit BLE Device",
+        "description": "Do you want to set up {name} ({address})?"
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to the device. Please make sure it's powered on and within range.",
+      "unknown": "An unknown error occurred."
+    },
+    "abort": {
+      "already_configured": "This device is already configured.",
+      "no_devices_found": "No Petkit BLE devices were found. Please make sure your device is powered on and in pairing mode.",
+      "not_supported": "This device is not a supported Petkit water fountain.",
+      "cannot_connect": "Unable to connect to the device."
+    }
+  }
+}
