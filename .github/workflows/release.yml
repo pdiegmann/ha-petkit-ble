@@ -27,7 +27,12 @@ jobs:
           VERSION=${TAG_NAME#v}
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "is_prerelease=$(if [[ $VERSION =~ -[a-zA-Z] ]]; then echo true; else echo false; fi)" >> $GITHUB_OUTPUT
+          # Consistent prerelease detection - only pure semver (x.y.z) are stable releases
+          if [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+          fi
       
       - name: 📊 Generate Commit Analysis
         id: commits
@@ -289,6 +294,13 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
             echo "✨ Creating new release with AI-generated content"
           fi
+          
+          # Log latest release decision  
+          if [[ "${{ steps.version.outputs.is_prerelease }}" == "false" ]]; then
+            echo "🥇 Stable release - will mark as latest"
+          else
+            echo "🧪 Pre-release - will not mark as latest"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
@@ -299,6 +311,7 @@ jobs:
           name: "${{ steps.version.outputs.tag_name }} - PetKit BLE Integration Release"
           body: ${{ steps.openai_release.outputs.result || steps.enhanced_notes.outputs.result }}
           prerelease: ${{ steps.version.outputs.is_prerelease }}
+          makeLatest: ${{ steps.version.outputs.is_prerelease == 'false' }}
           generateReleaseNotes: false
           allowUpdates: true
           updateOnlyUnreleased: false

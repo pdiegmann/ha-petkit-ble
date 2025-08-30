@@ -262,6 +262,13 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
             echo "✨ No existing release - backup system will create"
           fi
+          
+          # Log latest marking decision
+          if [[ "${{ steps.version.outputs.prerelease }}" == "false" ]]; then
+            echo "🎯 Stable version - will mark as latest release"
+          else
+            echo "🧪 Pre-release version - will not mark as latest"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           

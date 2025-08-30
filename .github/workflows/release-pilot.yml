@@ -235,6 +235,13 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
             echo "🎆 Creating new release with alternative generator"
           fi
+          
+          # Log latest release marking
+          if [[ "${{ steps.version.outputs.prerelease }}" == "false" ]]; then
+            echo "🏆 Stable release - marking as latest"
+          else
+            echo "🧪 Pre-release - not marking as latest"  
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           

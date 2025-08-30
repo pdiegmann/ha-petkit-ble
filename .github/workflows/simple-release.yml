@@ -164,6 +164,13 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
             echo "✨ Creating new release ${{ steps.version.outputs.tag }}"
           fi
+          
+          # Log latest release marking logic
+          if [[ "${{ steps.version.outputs.prerelease }}" == "false" ]]; then
+            echo "🎆 Stable release - will be marked as latest"
+          else
+            echo "🧪 Pre-release - will NOT be marked as latest"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
@@ -184,6 +191,7 @@ jobs:
       - name: 📊 Success Summary
         run: |
           ACTION="${{ steps.check_release.outputs.exists == 'true' && 'Updated' || 'Created' }}"
+          LATEST_STATUS="${{ steps.version.outputs.prerelease == 'false' && '🥇 Marked as Latest' || '🧪 Pre-release (not latest)' }}"
           echo "## 🎉 Release $ACTION Successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
@@ -191,6 +199,7 @@ jobs:
           echo "| **Action** | $ACTION |" >> $GITHUB_STEP_SUMMARY
           echo "| **Version** | ${{ steps.version.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Type** | ${{ steps.version.outputs.release_type }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Latest Status** | $LATEST_STATUS |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commits** | ${{ steps.changes.outputs.commits_count }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Files** | ${{ steps.changes.outputs.files_changed }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Existed** | ${{ steps.check_release.outputs.exists == 'true' && 'Yes (updated)' || 'No (new)' }} |" >> $GITHUB_STEP_SUMMARY
