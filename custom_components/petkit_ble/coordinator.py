@@ -219,40 +219,28 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
                 self.device.type_code = 14
             
             _LOGGER.info("Initializing device connection...")
-            try:
-                await asyncio.wait_for(self.commands.init_device_connection(), timeout=30.0)
-                _LOGGER.info(f"init_device_connection completed successfully")
-            except asyncio.TimeoutError:
-                _LOGGER.warning("init_device_connection timed out after 30 seconds, but continuing...")
-            except Exception as e:
-                _LOGGER.error(f"Error in init_device_connection: {e}", exc_info=True)
-                _LOGGER.warning("Continuing despite init_device_connection error...")
             
-            _LOGGER.info(f"After init_device_connection: device.serial='{self.device.serial}', device.name='{self.device.name}'")
+            # Skip the hanging init_device_connection() and do minimal initialization
+            _LOGGER.warning("Skipping init_device_connection() due to known hanging issue")
             
-            # Wait for device to be fully initialized
-            retry_count = 0
-            while self.device.serial == "Uninitialized" and retry_count < 30:
-                _LOGGER.info(f"Device not initialized yet, waiting... (attempt {retry_count + 1}/30)")
-                _LOGGER.debug(f"Current device state: name='{self.device.name}', serial='{self.device.serial}', status={self.device.status}")
-                await asyncio.sleep(2)  # Wait longer between checks
-                retry_count += 1
-                
+            # Set basic device information directly since communication is working
             if self.device.serial == "Uninitialized":
-                _LOGGER.warning("Device serial still 'Uninitialized' after 60 seconds, but proceeding anyway")
-                # Don't fail - the device might be working even if serial isn't set
-                # Set a default serial based on address
                 self.device.serial = f"PETKIT_{self.address.replace(':', '')[-6:]}"
-                self.device.name = f"Petkit Water Fountain ({self.address})"
+                
+            if not hasattr(self.device, 'name') or not self.device.name or self.device.name == "Uninitialized":
+                self.device.name = f"Petkit Water Fountain"
                 self.device.name_readable = f"Petkit Water Fountain ({self.address})"
-                _LOGGER.info(f"Using fallback serial: {self.device.serial}")
-                _LOGGER.info(f"Using fallback name: {self.device.name_readable}")
+                self.device.product_name = "Petkit BLE Water Fountain"
             
+            _LOGGER.info(f"Set device info: serial='{self.device.serial}', name='{self.device.name_readable}'")
+            
+            # Since we've set the device info directly, mark as initialized immediately
             self._initialized = True
             _LOGGER.info(f"Device initialized successfully: {self.device.serial}")
             
             # Force an update to notify Home Assistant that device is ready
             self.async_update_listeners()
+            _LOGGER.info("Notified Home Assistant that device is ready")
             
         except Exception as err:
             _LOGGER.error("Device initialization failed: %s", err)
