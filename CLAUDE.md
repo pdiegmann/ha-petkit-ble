@@ -53,7 +53,7 @@ python main.py --address "A1:B2:C3:D4:E5:F6" --logging_level "DEBUG"
 pip install -r PetkitW5BLEMQTT/requirements.txt
 
 # Or install specific dependencies
-pip install bleak>=1.1.0
+pip install bleak>=1.0.1
 ```
 
 ### System Service Setup
