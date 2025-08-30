@@ -82,10 +82,10 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         async def _async_poll(service_info: bluetooth.BluetoothServiceInfoBleak) -> PetkitBLEData:
             """Poll the device for updated data."""
             try:
-                # Initialize device on first poll if not already done
+                # Only poll if device is already initialized (prevent duplicate initialization)
                 if not self._initialized:
-                    _LOGGER.info("Device not initialized during poll, attempting initialization")
-                    await self._initialize_device()
+                    _LOGGER.debug("Device not yet initialized, skipping poll")
+                    return self.data
                     
                 # Get fresh device data using existing commands
                 await self.commands.get_battery()
@@ -185,6 +185,10 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             # Start notifications for device updates
             _LOGGER.info("Starting BLE notifications...")
             await self.ble_manager.start_notifications(self.address, Constants.READ_UUID)
+            
+            # Allow BLE stack to stabilize after connection
+            _LOGGER.debug("Waiting for BLE stack to stabilize...")
+            await asyncio.sleep(0.5)
             
             # Initialize device data and connection using existing logic
             # Check if we have connection data before trying to initialize device data
