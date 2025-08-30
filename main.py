@@ -21,6 +21,9 @@ class Manager:
         # Update ble_manager in commands now that it is created
         self.commands.ble_manager = self.ble_manager
         
+        # Set BLE manager reference in device for connection status access
+        self.device.set_ble_manager(self.ble_manager)
+        
         # Previously: MQTT client initialization and data forwarding setup
 
     def setup_logging(self, logging_level):
@@ -71,11 +74,36 @@ class Manager:
         
         self.logger.info("Restarting run function due to inactivity.")
 
-        # Reset initialization_state and software_version
+        # Reset device state
         self.device.initialization_state = False
         self.device.info = {'software_version': None}
+        self.device.serial = "Uninitialized"
+        
+        # Reset connection tracking in BLE manager
+        self.ble_manager.reset_connection_state()
         
         await self.run(address)
+
+    def get_connection_status_report(self):
+        """Get comprehensive connection status report for monitoring."""
+        import datetime
+        
+        status = self.device.status
+        report = {
+            "device_address": self.address,
+            "connection_status": status.get("connection_status", "unknown"),
+            "connection_attempts": status.get("connection_attempts", 0),
+            "connection_error": status.get("connection_error"),
+            "last_seen": None,
+            "last_seen_readable": "Never",
+        }
+        
+        if status.get("last_seen"):
+            report["last_seen"] = status["last_seen"]
+            last_seen_dt = datetime.datetime.fromtimestamp(status["last_seen"])
+            report["last_seen_readable"] = last_seen_dt.strftime("%Y-%m-%d %H:%M:%S")
+        
+        return report
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="BLE Manager")

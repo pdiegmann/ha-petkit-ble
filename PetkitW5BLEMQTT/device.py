@@ -19,6 +19,8 @@ class Device:
         self.device_type = 0
         self.type_code = 0
         self.rssi = 0
+        # Connection tracking (will be set by BLEManager)
+        self._ble_manager = None
         self._mac_readable = self.mac_readable
         self._name_readable = self.name_readable
         self._voltage = 0.0
@@ -65,7 +67,7 @@ class Device:
 
     @property
     def status(self):
-        return {
+        status_dict = {
             "battery": self._battery,
             "dnd_state": self._dnd_state,
             "do_not_disturb_switch": self._do_not_disturb_switch,
@@ -96,6 +98,17 @@ class Device:
             "warning_filter": self._warning_filter,
             "warning_water_missing": self._warning_water_missing,
         }
+        
+        # Add connection status if BLE manager is available
+        if self._ble_manager:
+            status_dict.update({
+                "connection_status": self._ble_manager.connection_status,
+                "last_seen": self._ble_manager.last_seen,
+                "connection_attempts": self._ble_manager.connection_attempts,
+                "connection_error": self._ble_manager.connection_error,
+            })
+        
+        return status_dict
                 
     @property
     def config(self):
@@ -148,3 +161,7 @@ class Device:
                 setattr(self, attribute_name, value)
             else:
                 raise KeyError(f"Invalid device.info key: {key}")
+
+    def set_ble_manager(self, ble_manager):
+        """Set the BLE manager reference for connection status access."""
+        self._ble_manager = ble_manager
