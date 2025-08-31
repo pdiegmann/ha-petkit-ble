@@ -146,9 +146,27 @@ class PetkitPumpRuntimeSensor(PetkitSensorBase):
         self._attr_name = f"{coordinator.device.name_readable} Pump Runtime"
     
     @property
-    def native_value(self) -> str | None:
-        """Return the pump runtime."""
-        return self.coordinator.current_data.get("status", {}).get("pump_runtime_readable")
+    def native_value(self) -> float | None:
+        """Return the pump runtime in hours."""
+        readable = self.coordinator.current_data.get("status", {}).get("pump_runtime_readable")
+        if readable:
+            # Parse "3 days, 19 hours" or "5 hours" to numeric hours
+            try:
+                total_hours = 0
+                if "day" in readable:
+                    parts = readable.split(", ")
+                    days_part = parts[0].split()[0]
+                    total_hours += int(days_part) * 24
+                    if len(parts) > 1:
+                        hours_part = parts[1].split()[0]
+                        total_hours += int(hours_part)
+                elif "hour" in readable:
+                    hours_part = readable.split()[0]
+                    total_hours = int(hours_part)
+                return float(total_hours)
+            except (ValueError, IndexError):
+                return None
+        return None
 
 class PetkitPumpRuntimeTodaySensor(PetkitSensorBase):
     """Pump runtime today sensor."""
@@ -164,9 +182,27 @@ class PetkitPumpRuntimeTodaySensor(PetkitSensorBase):
         self._attr_name = f"{coordinator.device.name_readable} Pump Runtime Today"
     
     @property
-    def native_value(self) -> str | None:
-        """Return the pump runtime today."""
-        return self.coordinator.current_data.get("status", {}).get("pump_runtime_today_readable")
+    def native_value(self) -> float | None:
+        """Return the pump runtime today in hours."""
+        readable = self.coordinator.current_data.get("status", {}).get("pump_runtime_today_readable")
+        if readable:
+            # Parse "5:50h" to numeric hours (5.83)
+            try:
+                if ":" in readable:
+                    # Format like "5:50h"
+                    time_part = readable.replace("h", "")
+                    hours, minutes = time_part.split(":")
+                    return float(hours) + float(minutes) / 60.0
+                elif "h" in readable:
+                    # Format like "5h"
+                    hours_part = readable.replace("h", "")
+                    return float(hours_part)
+                else:
+                    # Try to parse as plain number
+                    return float(readable)
+            except (ValueError, IndexError):
+                return None
+        return None
 
 class PetkitPurifiedWaterSensor(PetkitSensorBase):
     """Purified water sensor."""
