@@ -35,9 +35,11 @@ class EventHandlers:
             data = handler(parsed_data['data'], self.device.alias)
             self.logger.debug(f"Parsed data\n{data}")
             
-            # Update config
+            # Update info (firmware, identifiers, sync)
             if cmd in [86, 200, 213]:
+                self.logger.info(f"Updating device info with command {cmd}: {data}")
                 self.device.info = data
+                self.logger.info(f"Device info after update: firmware={self.device.firmware}, serial={self.device.serial}")
 
             # Update status
             if cmd in [66, 210, 211, 230]:

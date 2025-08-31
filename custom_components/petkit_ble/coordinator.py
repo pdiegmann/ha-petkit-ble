@@ -277,9 +277,16 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             if not hasattr(self.device, 'name') or not self.device.name or self.device.name == "Uninitialized":
                 self.device.name = f"Water Fountain"
                 self.device.name_readable = f"Water Fountain"
-                self.device.product_name = "Petkit Water Fountain"
             
-            _LOGGER.info(f"Set device info: serial='{self.device.serial}', name='{self.device.name_readable}'")
+            # Always ensure we have a proper product name for the device model
+            if not hasattr(self.device, 'product_name') or not self.device.product_name or self.device.product_name == "Uninitialized":
+                self.device.product_name = "Petkit BLE Water Fountain"
+                
+            # Set a default firmware version if none received yet
+            if not hasattr(self.device, 'firmware') or self.device.firmware == 0:
+                self.device.firmware = 1.0  # Default firmware version
+            
+            _LOGGER.info(f"Set device info: serial='{self.device.serial}', name='{self.device.name_readable}', firmware='{self.device.firmware}'")
             
             # Since we've set the device info directly, mark as initialized immediately
             self._initialized = True

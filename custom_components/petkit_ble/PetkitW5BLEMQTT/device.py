@@ -132,7 +132,17 @@ class Device:
     @property
     def info(self):
         return {
-
+            "firmware": self.firmware,
+            "serial": self.serial,
+            "device_id": self.device_id,
+            "device_id_bytes": self.device_id_bytes,
+            "name": self.name,
+            "name_readable": self.name_readable,
+            "product_name": self.product_name,
+            "device_type": self.device_type,
+            "type_code": self.type_code,
+            "mac": self.mac,
+            "mac_readable": self.mac_readable
         }
 
     @status.setter
@@ -156,9 +166,9 @@ class Device:
     @info.setter
     def info(self, info_dict):
         for key, value in info_dict.items():
-            attribute_name = key
-            if hasattr(self, attribute_name):
-                setattr(self, attribute_name, value)
+            # Map info keys directly to device attributes (no underscore prefix)
+            if hasattr(self, key):
+                setattr(self, key, value)
             else:
                 raise KeyError(f"Invalid device.info key: {key}")
 
