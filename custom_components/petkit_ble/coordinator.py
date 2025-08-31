@@ -12,7 +12,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from .const import DOMAIN, DEFAULT_SCAN_INTERVAL, CONF_ADDRESS
+from .const import DOMAIN, DEFAULT_SCAN_INTERVAL, CONF_ADDRESS, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
 from .ha_bluetooth_adapter import HABluetoothAdapter
 
 # Import the Petkit library modules (included in the integration)
@@ -49,6 +49,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         """Initialize the coordinator."""
         self.entry = entry
         self.address = entry.data[CONF_ADDRESS]
+        self.update_interval = entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
         
         # Initialize Petkit BLE components with HA Bluetooth adapter
         self.device = Device(self.address)
@@ -139,6 +140,9 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         self._initialized = False
         self._listeners: set = set()
         self._initialization_task = None
+        
+        # Listen for options updates
+        self.entry.add_update_listener(self.async_options_updated)
 
     async def async_start(self) -> None:
         """Start the coordinator and immediately initialize connection."""
@@ -312,8 +316,23 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         """Shutdown the coordinator and cleanup resources."""
         await self._cleanup()
 
+    async def async_options_updated(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        """Handle options update."""
+        old_interval = self.update_interval
+        self.update_interval = entry.options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
+        
+        if old_interval != self.update_interval:
+            _LOGGER.info(f"Update interval changed from {old_interval} to {self.update_interval} seconds")
+            # No need to restart the polling task, the change will take effect on the next iteration
+
     async def _cleanup(self) -> None:
         """Cleanup resources."""
+        # Remove options update listener
+        try:
+            self.entry.async_remove_update_listener(self.async_options_updated)
+        except (ValueError, KeyError):
+            pass  # Listener may not be registered or already removed
+        
         if self._consumer_task:
             self._consumer_task.cancel()
             try:
@@ -454,7 +473,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
 
     async def _start_regular_polling(self) -> None:
         """Start regular polling loop to fetch device data."""
-        poll_interval = 30  # seconds
+        poll_interval = self.update_interval
         _LOGGER.info(f"Starting regular polling every {poll_interval} seconds")
         
         while self._initialized:

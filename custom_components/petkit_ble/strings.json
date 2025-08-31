@@ -23,5 +23,16 @@
       "not_supported": "This device is not a supported Petkit water fountain.",
       "cannot_connect": "Unable to connect to the device."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Petkit BLE Options",
+        "description": "Configure your Petkit BLE water fountain settings.",
+        "data": {
+          "update_interval": "Data update interval (seconds)"
+        }
+      }
+    }
   }
 }

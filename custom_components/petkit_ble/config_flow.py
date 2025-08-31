@@ -9,10 +9,12 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components import bluetooth
 from homeassistant.const import CONF_ADDRESS
+from homeassistant.helpers import config_validation as cv
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.device_registry import format_mac
+from homeassistant.core import callback
 
-from .const import DOMAIN, SUPPORTED_DEVICES
+from .const import DOMAIN, SUPPORTED_DEVICES, CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,6 +22,12 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Petkit BLE."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
+        """Create the options flow."""
+        return OptionsFlowHandler(config_entry)
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -47,6 +55,7 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(
                 title=f"Petkit Water Fountain ({address})",
                 data={CONF_ADDRESS: address},
+                options={CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL},
             )
 
         # Get devices from HA's bluetooth discovery
@@ -112,6 +121,7 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(
                 title=f"Petkit Water Fountain ({address})",
                 data={CONF_ADDRESS: address},
+                options={CONF_UPDATE_INTERVAL: DEFAULT_UPDATE_INTERVAL},
             )
 
         return self.async_show_form(
@@ -163,3 +173,34 @@ class PetkitBLEConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except Exception as err:
             _LOGGER.error("Error testing connection to %s: %s", address, err)
             return False
+
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle a option flow for Petkit BLE."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        current_update_interval = self.config_entry.options.get(
+            CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL
+        )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_UPDATE_INTERVAL,
+                        default=current_update_interval,
+                    ): vol.All(cv.positive_int, vol.Range(min=5, max=300)),
+                }
+            ),
+        )

@@ -4,9 +4,11 @@ DOMAIN = "petkit_ble"
 
 # Configuration keys
 CONF_ADDRESS = "address"
+CONF_UPDATE_INTERVAL = "update_interval"
 
 # Default values
 DEFAULT_SCAN_INTERVAL = 30  # seconds
+DEFAULT_UPDATE_INTERVAL = 10  # seconds
 HEARTBEAT_INTERVAL = 60     # seconds
 
 # Device types
