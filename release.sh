@@ -334,13 +334,43 @@ if [ "$SKIP_COMMIT" != true ]; then
     fi
 fi
 
+# Check if tag already exists and handle it
+if git tag -l "v$NEW_VERSION" | grep -q "v$NEW_VERSION"; then
+    show_warning "Tag v$NEW_VERSION already exists locally"
+    if [ "$DRY_RUN" != true ]; then
+        show_info "Deleting existing local tag v$NEW_VERSION..."
+        if git tag -d "v$NEW_VERSION"; then
+            show_success "Existing local tag deleted"
+        else
+            show_warning "Could not delete existing local tag"
+        fi
+    else
+        echo "[DRY RUN] Would delete existing local tag: v$NEW_VERSION"
+    fi
+fi
+
+# Check if tag exists on remote
+if git ls-remote --tags origin | grep -q "refs/tags/v$NEW_VERSION"; then
+    show_warning "Tag v$NEW_VERSION already exists on remote"
+    if [ "$DRY_RUN" != true ]; then
+        show_info "Deleting existing remote tag v$NEW_VERSION..."
+        if git push --delete origin "v$NEW_VERSION" 2>/dev/null; then
+            show_success "Existing remote tag deleted"
+        else
+            show_warning "Could not delete existing remote tag (may not have existed)"
+        fi
+    else
+        echo "[DRY RUN] Would delete existing remote tag: v$NEW_VERSION"
+    fi
+fi
+
 # Create tag
 show_info "Creating tag v$NEW_VERSION..."
 if [ "$DRY_RUN" != true ]; then
     if git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"; then
         show_success "Tag v$NEW_VERSION created successfully"
     else
-        show_error "Failed to create tag" "Tag may already exist. Use 'git tag -d v$NEW_VERSION' to delete it first"
+        show_error "Failed to create tag after cleanup"
         exit 1
     fi
 else
