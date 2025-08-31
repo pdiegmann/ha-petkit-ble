@@ -56,6 +56,50 @@ pip install -r PetkitW5BLEMQTT/requirements.txt
 pip install bleak>=1.0.1
 ```
 
+## Release Management
+
+### Automated Release Process
+
+**IMPORTANT**: Always use the automated release script for version management. Never manually update version numbers in manifest.json - this is handled automatically by the GitHub workflow.
+
+```bash
+# Quick patch release (recommended for most changes)
+./release.sh
+
+# Semantic versioning
+./release.sh patch    # Bug fixes (0.0.x)
+./release.sh minor    # New features (0.x.0)
+./release.sh major    # Breaking changes (x.0.0)
+
+# Custom version
+./release.sh v1.2.3   # Specific version
+./release.sh 1.2.3    # Specific version (v prefix optional)
+
+# With custom commit message
+./release.sh minor "Add new BLE reconnection feature"
+```
+
+The release script automatically:
+1. ✅ Stages all uncommitted changes
+2. ✅ Commits with appropriate message
+3. ✅ Pushes commits to main branch
+4. ✅ Creates and pushes version tag
+5. ✅ Triggers GitHub workflow for automatic release
+6. ✅ Updates manifest.json version via workflow
+
+### Manual Release Commands (NOT RECOMMENDED)
+
+Only use these if the automated script fails:
+
+```bash
+# Manual process (avoid if possible)
+git add -A
+git commit -m "feat: describe your changes"
+git push origin main
+git tag -a v0.1.40 -m "Release v0.1.40"
+git push origin v0.1.40
+```
+
 ### System Service Setup
 
 The project includes a systemd service file (`petkitW5BLEMQTT.service`) for running as a system daemon. Note: This service file contains outdated MQTT parameters and should be updated for BLE-only operation.
