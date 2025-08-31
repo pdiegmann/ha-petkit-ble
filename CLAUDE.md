@@ -118,9 +118,15 @@ pip install bleak>=1.0.1
    - Stages ALL uncommitted changes
    - Creates semantic commit messages
    - Pushes commits to main branch
-   - Creates and pushes annotated version tags
+   - Creates and pushes annotated version tags with automatic conflict resolution
 
-5. **🤖 Workflow Automation**
+5. **🏷️ Smart Tag Management**
+   - Automatically detects existing local and remote tags
+   - Cleans up conflicting tags without user intervention
+   - Provides clear feedback on tag operations
+   - Ensures clean tag creation every time
+
+6. **🤖 Workflow Automation**
    - Triggers GitHub Actions workflow
    - Updates manifest.json automatically
    - Generates AI-powered release notes
@@ -131,6 +137,7 @@ pip install bleak>=1.0.1
 - **Comprehensive error messages** with suggested fixes
 - **Dry-run mode** to test changes without executing
 - **Automatic conflict resolution** with stash/restore
+- **Smart tag cleanup** automatically handles existing tag conflicts
 - **Version validation** to prevent duplicates
 - **Recovery instructions** when operations fail
 - **Environment checks** before starting
