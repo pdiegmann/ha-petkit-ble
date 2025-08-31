@@ -275,9 +275,9 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
                 self.device.serial = f"PETKIT_{self.address.replace(':', '')[-6:]}"
                 
             if not hasattr(self.device, 'name') or not self.device.name or self.device.name == "Uninitialized":
-                self.device.name = f"Petkit Water Fountain"
-                self.device.name_readable = f"Petkit Water Fountain ({self.address})"
-                self.device.product_name = "Petkit BLE Water Fountain"
+                self.device.name = f"Water Fountain"
+                self.device.name_readable = f"Water Fountain"
+                self.device.product_name = "Petkit Water Fountain"
             
             _LOGGER.info(f"Set device info: serial='{self.device.serial}', name='{self.device.name_readable}'")
             

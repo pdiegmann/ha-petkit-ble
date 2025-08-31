@@ -40,12 +40,13 @@ class PetkitSwitchBase(CoordinatorEntity[PetkitBLECoordinator], SwitchEntity):
     def device_info(self) -> DeviceInfo:
         """Return device info dynamically."""
         device_id = self.coordinator.device.serial if self.coordinator.device.serial != "Uninitialized" else self.coordinator.address
+        device_name = self.coordinator.device.name_readable if self.coordinator.device.name_readable != "Uninitialized" else "Water Fountain"
         return {
             "identifiers": {(DOMAIN, device_id)},
-            "name": self.coordinator.device.name_readable,
+            "name": device_name,
             "manufacturer": "Petkit",
-            "model": self.coordinator.device.product_name,
-            "sw_version": str(self.coordinator.device.firmware),
+            "model": self.coordinator.device.product_name or "Water Fountain",
+            "sw_version": str(self.coordinator.device.firmware) if self.coordinator.device.firmware else "Unknown",
         }
 
 class PetkitPowerSwitch(PetkitSwitchBase):
@@ -54,8 +55,9 @@ class PetkitPowerSwitch(PetkitSwitchBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the power switch."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_power"
-        self._attr_name = f"{coordinator.device.name_readable} Power"
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address.replace(":", "")
+        self._attr_unique_id = f"{device_id}_power"
+        self._attr_name = "Power"
         self._attr_icon = "mdi:power"
     
     @property
@@ -82,8 +84,9 @@ class PetkitSmartModeSwitch(PetkitSwitchBase):
     def __init__(self, coordinator: PetkitBLECoordinator) -> None:
         """Initialize the smart mode switch."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.device.serial}_smart_mode"
-        self._attr_name = f"{coordinator.device.name_readable} Smart Mode"
+        device_id = coordinator.device.serial if coordinator.device.serial != "Uninitialized" else coordinator.address.replace(":", "")
+        self._attr_unique_id = f"{device_id}_smart_mode"
+        self._attr_name = "Smart Mode"
         self._attr_icon = "mdi:brain"
     
     @property
