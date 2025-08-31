@@ -47,12 +47,14 @@ class HABluetoothAdapter:
         self._connection_attempts = 0
         self._last_connection_attempt = None
         self._connection_error = None
-        self._retry_delay = 1.0  # Start with 1 second delay
-        self._max_retry_delay = 30.0  # Maximum retry delay (reduced from 60s)
-        self._max_connection_attempts = 20  # Increased from 10 to 20
+        self._retry_delay = 0.1  # Start with immediate retry (100ms)
+        self._max_retry_delay = 30.0  # Maximum retry delay
+        self._max_connection_attempts = 1000  # Very high to allow continuous retries
         self._last_logged_status = None  # Track last logged status to prevent spam
         self._last_reset_time = time.time()
         self._reset_interval = 300.0  # Reset connection attempts every 5 minutes
+        self._immediate_reconnect = True  # Flag for immediate reconnection
+        self._reconnection_task = None  # Track reconnection task
 
     async def scan(self) -> dict[str, Any]:
         """Scan for Petkit BLE devices using HA's bluetooth integration."""
@@ -109,8 +111,11 @@ class HABluetoothAdapter:
             # Update status based on whether this is initial connection or retry
             if self._connection_attempts == 0:
                 self._update_connection_status(ConnectionStatus.CONNECTING)
+                self.logger.info(f"🔄 Initial BLE connection attempt to {address}")
             else:
                 self._update_connection_status(ConnectionStatus.RECONNECTING)
+                if self._connection_attempts % 10 == 0:  # Log every 10th attempt
+                    self.logger.info(f"🔄 BLE reconnection attempt #{self._connection_attempts} to {address}")
             
             self._last_connection_attempt = time.time()
             
@@ -120,8 +125,11 @@ class HABluetoothAdapter:
             )
             
             if not self._ble_device:
-                error_msg = f"Device {address} not found in HA bluetooth"
+                error_msg = f"Device {address} not found in HA bluetooth scan"
                 self._connection_attempts += 1
+                
+                if self._connection_attempts % 5 == 0:  # Log every 5th failure
+                    self.logger.warning(f"⚠️ Device not found after {self._connection_attempts} attempts, will keep trying...")
                 
                 if not self._should_attempt_retry():
                     self._update_connection_status(ConnectionStatus.FAILED, error_msg)
@@ -129,24 +137,45 @@ class HABluetoothAdapter:
                     self._update_connection_status(ConnectionStatus.RECONNECTING, error_msg)
                 return False
             
+            self.logger.debug(f"Device found in scan, establishing BLE connection...")
+            
             # Use bleak-retry-connector directly with the BLE device
             from bleak import BleakClient
             self._client = await establish_connection(
                 BleakClient,
                 self._ble_device,
                 address,
-                timeout=30.0
+                timeout=10.0  # Reduced timeout for faster retries
             )
             
             self.connected_devices[address] = self._client
             self._update_connection_status(ConnectionStatus.CONNECTED)
             self._update_last_seen()
             
+            self.logger.info(f"✅ BLE connection established to {address} after {self._connection_attempts + 1} attempt(s)")
+            
             return True
+            
+        except asyncio.TimeoutError:
+            self._connection_attempts += 1
+            error_msg = f"Connection timeout (attempt #{self._connection_attempts})"
+            
+            if self._connection_attempts % 3 == 0:  # Log every 3rd timeout
+                self.logger.warning(f"⏱️ Connection timeout after {self._connection_attempts} attempts, continuing...")
+            
+            if not self._should_attempt_retry():
+                self._update_connection_status(ConnectionStatus.FAILED, error_msg)
+            else:
+                self._update_connection_status(ConnectionStatus.RECONNECTING, error_msg)
+            
+            return False
             
         except Exception as err:
             self._connection_attempts += 1
             error_msg = f"Connection attempt {self._connection_attempts} failed: {err}"
+            
+            if self._connection_attempts % 5 == 0:  # Log every 5th error
+                self.logger.warning(f"❌ Connection failed {self._connection_attempts} times: {err}")
             
             if not self._should_attempt_retry():
                 self._update_connection_status(ConnectionStatus.FAILED, error_msg)
@@ -155,8 +184,13 @@ class HABluetoothAdapter:
             
             return False
 
-    async def disconnect_device(self, address: str) -> bool:
-        """Disconnect from device."""
+    async def disconnect_device(self, address: str, trigger_reconnect: bool = False) -> bool:
+        """Disconnect from device.
+        
+        Args:
+            address: Device address to disconnect
+            trigger_reconnect: If True, immediately attempt reconnection
+        """
         try:
             if address in self.connected_devices:
                 client = self.connected_devices[address]
@@ -164,6 +198,12 @@ class HABluetoothAdapter:
                     await client.disconnect()
                 del self.connected_devices[address]
                 self._update_connection_status(ConnectionStatus.DISCONNECTED)
+                
+                # Trigger immediate reconnection if requested and enabled
+                if trigger_reconnect and self._immediate_reconnect:
+                    self.logger.info("Triggering immediate reconnection after disconnect")
+                    asyncio.create_task(self._immediate_reconnection_loop(address))
+                
                 return True
             return False
         except Exception as err:
@@ -172,6 +212,12 @@ class HABluetoothAdapter:
             if address in self.connected_devices:
                 del self.connected_devices[address]
             self._update_connection_status(ConnectionStatus.DISCONNECTED, error_msg)
+            
+            # Trigger immediate reconnection on unexpected disconnect
+            if self._immediate_reconnect:
+                self.logger.info("Triggering immediate reconnection after unexpected disconnect")
+                asyncio.create_task(self._immediate_reconnection_loop(address))
+            
             return False
 
     async def read_characteristic(self, address: str, characteristic_uuid: str) -> bytes | None:
@@ -196,9 +242,12 @@ class HABluetoothAdapter:
                 client = self.connected_devices[address]
                 # Check if client is still connected before attempting write
                 if hasattr(client, 'is_connected') and not client.is_connected:
-                    self.logger.warning(f"Client for {address} reports not connected, cleaning up...")
+                    self.logger.warning(f"Client for {address} reports not connected, triggering immediate reconnection...")
                     del self.connected_devices[address]
                     self._update_connection_status(ConnectionStatus.RECONNECTING, "Client disconnected during write")
+                    # Trigger immediate reconnection
+                    if self._immediate_reconnect:
+                        asyncio.create_task(self._immediate_reconnection_loop(address))
                     return False
                     
                 await client.write_gatt_char(characteristic_uuid, data)
@@ -207,6 +256,9 @@ class HABluetoothAdapter:
                 return True
             else:
                 self.logger.debug(f"Device {address} not connected for write operation")
+                # Attempt immediate reconnection if not connected
+                if self._immediate_reconnect and self._connection_status != ConnectionStatus.CONNECTING:
+                    asyncio.create_task(self._immediate_reconnection_loop(address))
                 return False
         except Exception as err:
             error_msg = f"Write failed: {err}"
@@ -215,6 +267,9 @@ class HABluetoothAdapter:
             if address in self.connected_devices:
                 del self.connected_devices[address]
             self._update_connection_status(ConnectionStatus.RECONNECTING, error_msg)
+            # Trigger immediate reconnection
+            if self._immediate_reconnect:
+                asyncio.create_task(self._immediate_reconnection_loop(address))
             return False
 
     async def start_notifications(self, address: str, characteristic_uuid: str) -> bool:
@@ -265,16 +320,26 @@ class HABluetoothAdapter:
         while True:
             try:
                 if not self.connected_devices.get(address):
-                    # Only attempt reconnection if we should retry and we're not already trying
+                    # Immediate reconnection if not connected
                     if (self._connection_status not in [ConnectionStatus.CONNECTING, ConnectionStatus.RECONNECTING] and
                         self._should_attempt_retry()):
                         
-                        await self._attempt_reconnection_with_backoff(address)
+                        if self._immediate_reconnect:
+                            # Use immediate reconnection loop instead of backoff
+                            await self._immediate_reconnection_loop(address)
+                        else:
+                            await self._attempt_reconnection_with_backoff(address)
                     elif self._connection_status == ConnectionStatus.FAILED:
-                        # If connection failed, wait longer before checking again
-                        await asyncio.sleep(30)
+                        # Even if failed, keep trying with immediate reconnection
+                        if self._immediate_reconnect:
+                            self.logger.info("Connection previously failed, retrying immediately...")
+                            # Reset attempts to allow more retries
+                            self._connection_attempts = 0
+                            await self._immediate_reconnection_loop(address)
+                        else:
+                            await asyncio.sleep(30)
                     
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.1)  # Very short sleep between checks
                     continue
                     
                 message = await self.queue.get()
@@ -287,8 +352,13 @@ class HABluetoothAdapter:
                 break
             except Exception as err:
                 self.logger.error(f"Error in message consumer: {err}")
-                self.queue.task_done()
-                await self._attempt_reconnection_with_backoff(address)
+                if self.queue.qsize() > 0:
+                    self.queue.task_done()
+                # Use immediate reconnection on error
+                if self._immediate_reconnect:
+                    await self._immediate_reconnection_loop(address)
+                else:
+                    await self._attempt_reconnection_with_backoff(address)
                 
     async def _attempt_reconnection_with_backoff(self, address):
         """Attempt reconnection with exponential backoff."""
@@ -365,8 +435,70 @@ class HABluetoothAdapter:
     
     def _calculate_retry_delay(self):
         """Calculate exponential backoff delay."""
-        delay = min(self._retry_delay * (2 ** self._connection_attempts), self._max_retry_delay)
-        return delay
+        if self._immediate_reconnect:
+            # For immediate reconnection, use minimal delays
+            if self._connection_attempts < 5:
+                return 0.1  # 100ms for first 5 attempts
+            elif self._connection_attempts < 10:
+                return 0.5  # 500ms for next 5 attempts
+            elif self._connection_attempts < 20:
+                return 1.0  # 1 second for next 10 attempts
+            else:
+                # Gradually increase but stay relatively low
+                return min(5.0, 1.0 + (self._connection_attempts - 20) * 0.5)
+        else:
+            # Original exponential backoff for non-immediate mode
+            delay = min(self._retry_delay * (2 ** self._connection_attempts), self._max_retry_delay)
+            return delay
+    
+    async def _immediate_reconnection_loop(self, address: str) -> None:
+        """Immediately and continuously attempt to reconnect."""
+        # Avoid multiple reconnection loops
+        if self._reconnection_task and not self._reconnection_task.done():
+            self.logger.debug("Reconnection already in progress, skipping duplicate loop")
+            return
+        
+        self._reconnection_task = asyncio.current_task()
+        
+        while not self.connected_devices.get(address):
+            try:
+                if not self._should_attempt_retry():
+                    # Reset attempts after hitting max to allow continuous retries
+                    self.logger.info("Resetting connection attempts for continuous retry")
+                    self._connection_attempts = 0
+                    self._connection_status = ConnectionStatus.DISCONNECTED
+                
+                # Only log every few attempts to avoid spam
+                if self._connection_attempts % 5 == 0 or self._connection_attempts < 3:
+                    self.logger.info(f"🔁 Immediate reconnection attempt #{self._connection_attempts + 1}")
+                    
+                success = await self.connect_device(address)
+                
+                if success:
+                    self.logger.info(f"✅ Immediate reconnection successful after {self._connection_attempts} attempts!")
+                    # Restart notifications after successful reconnection
+                    try:
+                        from .PetkitW5BLEMQTT.constants import Constants
+                        await self.start_notifications(address, Constants.READ_UUID)
+                        self.logger.info("📡 Notifications restarted successfully")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to restart notifications: {e}")
+                    break
+                else:
+                    # Very short delay before next attempt
+                    delay = self._calculate_retry_delay()
+                    if self._connection_attempts % 10 == 0:  # Log delay every 10 attempts
+                        self.logger.debug(f"Reconnection failed, retrying in {delay}s (attempt #{self._connection_attempts})")
+                    await asyncio.sleep(delay)
+                    
+            except asyncio.CancelledError:
+                self.logger.info("Immediate reconnection loop cancelled")
+                break
+            except Exception as err:
+                self.logger.error(f"Error in immediate reconnection loop: {err}")
+                await asyncio.sleep(0.5)  # Brief pause on error
+        
+        self._reconnection_task = None
     
     def _should_attempt_retry(self):
         """Check if we should attempt another retry."""

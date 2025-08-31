@@ -152,26 +152,32 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
     async def _initialization_loop(self) -> None:
         """Continuously attempt device initialization until successful."""
         retry_count = 0
-        max_retries = 50  # Try for a while before giving up
+        # No max retries - keep trying indefinitely
         
-        while not self._initialized and retry_count < max_retries:
+        while not self._initialized:
             try:
-                _LOGGER.info(f"Initialization attempt {retry_count + 1}/{max_retries}")
+                _LOGGER.info(f"Initialization attempt {retry_count + 1}")
                 await self._initialize_device()
                 if self._initialized:
+                    _LOGGER.info("Device initialization successful")
                     break
             except Exception as err:
                 _LOGGER.warning(f"Initialization attempt {retry_count + 1} failed: {err}")
                 
             retry_count += 1
-            if retry_count < max_retries:
-                # Wait with exponential backoff (max 60s)
-                delay = min(5 * (2 ** min(retry_count // 3, 3)), 60)
-                _LOGGER.info(f"Waiting {delay}s before next initialization attempt...")
-                await asyncio.sleep(delay)
-        
-        if not self._initialized:
-            _LOGGER.error(f"Device initialization failed after {max_retries} attempts")
+            
+            # Use immediate retry with minimal delays
+            if retry_count < 5:
+                delay = 0.5  # 500ms for first 5 attempts
+            elif retry_count < 10:
+                delay = 1.0  # 1 second for next 5 attempts  
+            elif retry_count < 20:
+                delay = 2.0  # 2 seconds for next 10 attempts
+            else:
+                delay = 5.0  # 5 seconds afterwards
+            
+            _LOGGER.debug(f"Waiting {delay}s before next initialization attempt...")
+            await asyncio.sleep(delay)
 
     async def _async_setup(self) -> None:
         """Set up the coordinator during first refresh."""
@@ -188,6 +194,11 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             
             # Connect to the specific device using HA Bluetooth
             _LOGGER.info(f"Attempting to connect to device {self.address}")
+            
+            # Enable immediate reconnection mode
+            if hasattr(self.ble_manager, '_immediate_reconnect'):
+                self.ble_manager._immediate_reconnect = True
+            
             if not await self.ble_manager.connect_device(self.address):
                 raise UpdateFailed(f"Could not connect to device {self.address}")
             
@@ -336,8 +347,9 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         try:
             # Check if device is still connected before attempting commands
             if not self.ble_manager.connected_devices.get(self.address):
-                _LOGGER.warning("Device not connected during refresh request, attempting reconnection")
-                await self._attempt_reconnection()
+                _LOGGER.warning("Device not connected during refresh request, triggering immediate reconnection")
+                # Don't wait for reconnection to complete, just trigger it
+                asyncio.create_task(self._attempt_reconnection())
                 return
             
             # Get fresh device data using existing commands with delays for BLE stability
@@ -367,19 +379,42 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
     async def _attempt_reconnection(self) -> None:
         """Attempt to reconnect to the device."""
         try:
-            _LOGGER.info("Attempting to reconnect to device")
-            if await self.ble_manager.connect_device(self.address):
-                # Restart message consumer and notifications
-                if self._consumer_task and not self._consumer_task.done():
-                    self._consumer_task.cancel()
+            _LOGGER.info("Attempting immediate reconnection to device")
+            
+            # Enable immediate reconnection mode in adapter
+            if hasattr(self.ble_manager, '_immediate_reconnect'):
+                self.ble_manager._immediate_reconnect = True
+            
+            # Use the immediate reconnection loop
+            if hasattr(self.ble_manager, '_immediate_reconnection_loop'):
+                await self.ble_manager._immediate_reconnection_loop(self.address)
                 
-                self._consumer_task = asyncio.create_task(
-                    self.ble_manager.message_consumer(self.address, Constants.WRITE_UUID)
-                )
-                await self.ble_manager.start_notifications(self.address, Constants.READ_UUID)
-                _LOGGER.info("Device reconnection successful")
+                # If reconnected, restart message consumer
+                if self.address in self.ble_manager.connected_devices:
+                    if self._consumer_task and not self._consumer_task.done():
+                        self._consumer_task.cancel()
+                    
+                    self._consumer_task = asyncio.create_task(
+                        self.ble_manager.message_consumer(self.address, Constants.WRITE_UUID)
+                    )
+                    await self.ble_manager.start_notifications(self.address, Constants.READ_UUID)
+                    _LOGGER.info("Device reconnection successful")
+                else:
+                    _LOGGER.warning("Device reconnection in progress...")
             else:
-                _LOGGER.error("Device reconnection failed")
+                # Fallback to standard reconnection
+                if await self.ble_manager.connect_device(self.address):
+                    # Restart message consumer and notifications
+                    if self._consumer_task and not self._consumer_task.done():
+                        self._consumer_task.cancel()
+                    
+                    self._consumer_task = asyncio.create_task(
+                        self.ble_manager.message_consumer(self.address, Constants.WRITE_UUID)
+                    )
+                    await self.ble_manager.start_notifications(self.address, Constants.READ_UUID)
+                    _LOGGER.info("Device reconnection successful")
+                else:
+                    _LOGGER.error("Device reconnection failed")
         except Exception as err:
             _LOGGER.error(f"Error during reconnection attempt: {err}")
 
