@@ -214,7 +214,7 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             
             # Allow BLE stack to stabilize after connection
             _LOGGER.debug("Waiting for BLE stack to stabilize...")
-            await asyncio.sleep(1.0)  # Increased to 1 second for better stability
+            await asyncio.sleep(0.2)  # Reduced delay - Petkit devices disconnect quickly if idle
             
             # Verify client is actually ready for writes
             client = self.ble_manager.connected_devices.get(self.address)
@@ -288,6 +288,10 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             # Force an update to notify Home Assistant that device is ready
             self.async_update_listeners()
             _LOGGER.info("Notified Home Assistant that device is ready")
+            
+            # Start regular data polling since ActiveBluetoothProcessorCoordinator might not trigger automatically
+            _LOGGER.info("Starting regular data polling...")
+            asyncio.create_task(self._start_regular_polling())
             
         except Exception as err:
             import traceback
@@ -435,6 +439,29 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
         """Update all listeners."""
         for update_callback in self._listeners:
             update_callback()
+
+    async def _start_regular_polling(self) -> None:
+        """Start regular polling loop to fetch device data."""
+        poll_interval = 30  # seconds
+        _LOGGER.info(f"Starting regular polling every {poll_interval} seconds")
+        
+        while self._initialized:
+            try:
+                await asyncio.sleep(poll_interval)
+                
+                if not self._initialized:
+                    break
+                    
+                _LOGGER.debug("Regular poll: requesting device data refresh")
+                await self.async_request_refresh()
+                
+            except asyncio.CancelledError:
+                _LOGGER.info("Regular polling cancelled")
+                break
+            except Exception as err:
+                _LOGGER.warning(f"Error in regular polling: {err}")
+                # Continue polling even if one cycle fails
+                await asyncio.sleep(5)  # Short delay before retry
 
     @property
     def current_data(self) -> dict[str, Any]:
