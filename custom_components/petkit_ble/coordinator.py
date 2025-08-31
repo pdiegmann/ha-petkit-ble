@@ -371,9 +371,14 @@ class PetkitBLECoordinator(ActiveBluetoothProcessorCoordinator[PetkitBLEData]):
             # Allow time for responses to be processed
             await asyncio.sleep(1.0)
             
+            # Log current device data for debugging
+            _LOGGER.debug(f"Current device status: {self.device.status}")
+            _LOGGER.debug(f"Current device config: {self.device.config}")
+            _LOGGER.debug(f"Current device info: {self.device.info}")
+            
             # Notify all listeners that data has been updated
             self.async_update_listeners()
-            _LOGGER.debug("Device data refresh completed")
+            _LOGGER.debug("Device data refresh completed - listeners notified")
             
         except Exception as err:
             _LOGGER.warning("Failed to refresh device data: %s", err)

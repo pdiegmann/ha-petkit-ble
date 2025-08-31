@@ -306,8 +306,15 @@ class HABluetoothAdapter:
         """Wrapper for notification handling."""
         # Update last seen timestamp on successful notification
         self._update_last_seen()
+        self.logger.debug(f"📨 Received BLE notification from {sender}: {data.hex() if data else 'None'}")
         if self.event_handler:
-            await self.event_handler.handle_notification(sender, data)
+            try:
+                await self.event_handler.handle_notification(sender, data)
+                self.logger.debug("✅ Notification processed successfully")
+            except Exception as err:
+                self.logger.error(f"❌ Error processing notification: {err}")
+        else:
+            self.logger.warning("⚠️ No event handler configured for notifications")
 
     async def heartbeat(self, interval: int) -> None:
         """Heartbeat method compatible with existing library."""
