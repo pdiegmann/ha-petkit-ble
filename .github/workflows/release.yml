@@ -34,6 +34,48 @@ jobs:
             echo "is_prerelease=true" >> $GITHUB_OUTPUT
           fi
       
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      
+      - name: 📝 Update manifest.json version
+        run: |
+          # Update the version in manifest.json to match the tag version
+          MANIFEST_PATH="custom_components/petkit_ble/manifest.json"
+          
+          if [ -f "$MANIFEST_PATH" ]; then
+            echo "📋 Current manifest.json:"
+            cat "$MANIFEST_PATH"
+            
+            # Use Python script for reliable JSON manipulation
+            python .github/update-manifest-version.py "${{ steps.version.outputs.version }}"
+            
+            echo "✅ Updated manifest.json:"
+            cat "$MANIFEST_PATH"
+            
+            # Commit the change if there are differences
+            if ! git diff --quiet "$MANIFEST_PATH"; then
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git add "$MANIFEST_PATH"
+              git commit -m "chore: update manifest.json version to ${{ steps.version.outputs.version }}"
+              
+              # Create a new tag pointing to the updated commit
+              git tag -f "${{ steps.version.outputs.tag_name }}" -m "Release ${{ steps.version.outputs.version }} with updated manifest"
+              
+              # Push the changes and updated tag
+              git push origin HEAD:main --force-with-lease
+              git push origin "${{ steps.version.outputs.tag_name }}" --force
+              
+              echo "📦 Manifest version updated and pushed"
+            else
+              echo "ℹ️ Manifest version already matches tag version"
+            fi
+          else
+            echo "⚠️ Warning: manifest.json not found at $MANIFEST_PATH"
+          fi
+      
       - name: 📊 Generate Commit Analysis
         id: commits
         run: |
