@@ -8,10 +8,26 @@ set -e
 
 # Dry run mode (set to true for testing)
 DRY_RUN=false
-if [ "$1" = "--dry-run" ] || [ "$1" = "-n" ]; then
-    DRY_RUN=true
-    shift  # Remove --dry-run from arguments
-fi
+AUTO_YES=false
+
+# Parse flags
+while [[ $1 == --* ]] || [[ $1 == -* ]]; do
+    case $1 in
+        --dry-run|-n)
+            DRY_RUN=true
+            shift
+            ;;
+        --yes|-y)
+            AUTO_YES=true
+            shift
+            ;;
+        *)
+            echo -e "${RED}❌ Unknown flag: $1${NC}"
+            show_usage
+            exit 1
+            ;;
+    esac
+done
 
 # Colors for output
 RED='\033[0;31m'
@@ -25,10 +41,11 @@ NC='\033[0m' # No Color
 show_usage() {
     echo -e "${CYAN}📦 PetKit BLE Release Script${NC}"
     echo ""
-    echo "Usage: $0 [--dry-run] [version|major|minor|patch] [commit message]"
+    echo "Usage: $0 [--dry-run] [--yes] [version|major|minor|patch] [commit message]"
     echo ""
     echo "Options:"
     echo "  --dry-run, -n  - Show what would be done without executing"
+    echo "  --yes, -y      - Skip confirmation prompts (auto-confirm)"
     echo ""
     echo "Arguments:"
     echo "  version    - Specific version (e.g., 1.2.3 or v1.2.3)"
@@ -38,12 +55,13 @@ show_usage() {
     echo "  (none)     - Same as 'patch'"
     echo ""
     echo "Examples:"
-    echo "  $0                              # Increment patch version"
-    echo "  $0 patch                        # Increment patch version"
-    echo "  $0 minor \"Add new feature\"     # Increment minor with message"
-    echo "  $0 major \"Breaking changes\"    # Increment major with message"
-    echo "  $0 v2.1.0 \"Custom version\"     # Set specific version"
-    echo "  $0 2.1.0                        # Set specific version (v prefix optional)"
+    echo "  $0                                    # Increment patch version"
+    echo "  $0 -y patch                           # Increment patch (auto-confirm)"  
+    echo "  $0 --dry-run minor                    # Test minor increment"
+    echo "  $0 -y minor \"Add new feature\"        # Increment minor with message"
+    echo "  $0 --yes major \"Breaking changes\"    # Increment major with message"
+    echo "  $0 -y v2.1.0 \"Custom version\"        # Set specific version"
+    echo "  $0 --dry-run --yes 2.1.0             # Test specific version"
 }
 
 # Function to get current version from manifest
@@ -132,6 +150,54 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
     exit 1
 fi
 
+# Check if we need to pull changes from remote
+echo -e "${BLUE}🔍 Checking remote status...${NC}"
+git fetch origin main
+
+# Check if local is behind remote
+LOCAL_COMMIT=$(git rev-parse HEAD)
+REMOTE_COMMIT=$(git rev-parse origin/main)
+
+if [ "$LOCAL_COMMIT" != "$REMOTE_COMMIT" ]; then
+    echo -e "${YELLOW}⚠️  Local branch is behind remote${NC}"
+    
+    # Check if there are local changes
+    if [ -n "$(git status --porcelain)" ]; then
+        echo -e "${YELLOW}📝 Found local changes - stashing for pull...${NC}"
+        
+        # Stash changes temporarily
+        git stash push -m "Temporary stash for release script pull"
+        
+        # Pull the latest changes
+        echo -e "${BLUE}→ Pulling latest changes...${NC}"
+        if git pull origin main; then
+            echo -e "${GREEN}✅ Successfully pulled latest changes${NC}"
+            
+            # Restore stashed changes
+            echo -e "${BLUE}→ Restoring local changes...${NC}"
+            if git stash pop; then
+                echo -e "${GREEN}✅ Local changes restored${NC}"
+            else
+                echo -e "${RED}❌ Failed to restore local changes${NC}"
+                echo -e "${YELLOW}ℹ️  Your changes are in the stash. You can restore them with:${NC}"
+                echo "  git stash pop"
+                exit 1
+            fi
+        else
+            echo -e "${RED}❌ Failed to pull latest changes${NC}"
+            echo -e "${BLUE}→ Restoring stashed changes...${NC}"
+            git stash pop
+            exit 1
+        fi
+    else
+        echo -e "${BLUE}→ Pulling latest changes...${NC}"
+        git pull origin main
+        echo -e "${GREEN}✅ Successfully pulled latest changes${NC}"
+    fi
+    
+    echo ""
+fi
+
 # Check for uncommitted changes
 if [ -n "$(git status --porcelain)" ]; then
     echo -e "${YELLOW}📝 Found uncommitted changes${NC}"
@@ -193,11 +259,15 @@ if [ -z "$(git diff --cached --name-only)" ]; then
     echo -e "${YELLOW}⚠️  No changes to commit${NC}"
     
     # Ask if user wants to create tag anyway
-    read -p "Do you want to create tag $TAG_NAME anyway? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo -e "${RED}❌ Release cancelled${NC}"
-        exit 1
+    if [ "$AUTO_YES" = false ]; then
+        read -p "Do you want to create tag $TAG_NAME anyway? (y/N) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo -e "${RED}❌ Release cancelled${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Auto-confirmed: Creating tag anyway${NC}"
     fi
     
     SKIP_COMMIT=true
@@ -213,13 +283,17 @@ else
 fi
 
 echo ""
-read -p "Do you want to proceed with the release? (y/N) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo -e "${RED}❌ Release cancelled${NC}"
-    # Unstage changes
-    git reset HEAD
-    exit 1
+if [ "$AUTO_YES" = false ]; then
+    read -p "Do you want to proceed with the release? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "${RED}❌ Release cancelled${NC}"
+        # Unstage changes
+        git reset HEAD
+        exit 1
+    fi
+else
+    echo -e "${GREEN}✅ Auto-confirmed: Proceeding with release${NC}"
 fi
 
 # Perform release steps
@@ -246,8 +320,17 @@ echo -e "${BLUE}→ Pushing commits to main...${NC}"
 if [ "$DRY_RUN" = true ]; then
     echo -e "${YELLOW}[DRY RUN] Would push commits to origin/main${NC}"
 else
-    git push origin main
-    echo -e "${GREEN}✅ Commits pushed${NC}"
+    if git push origin main; then
+        echo -e "${GREEN}✅ Commits pushed${NC}"
+    else
+        echo -e "${RED}❌ Failed to push commits${NC}"
+        echo -e "${YELLOW}ℹ️  The remote may have been updated during the release process${NC}"
+        echo "Try pulling the latest changes and resolving any conflicts:"
+        echo "  git pull --rebase origin main"
+        echo "  git push origin main"
+        echo "  git push origin $TAG_NAME"
+        exit 1
+    fi
 fi
 
 # Create and push tag
@@ -295,8 +378,15 @@ echo -e "${BLUE}→ Pushing tag $TAG_NAME...${NC}"
 if [ "$DRY_RUN" = true ]; then
     echo -e "${YELLOW}[DRY RUN] Would push tag to origin${NC}"
 else
-    git push origin "$TAG_NAME"
-    echo -e "${GREEN}✅ Tag pushed${NC}"
+    if git push origin "$TAG_NAME"; then
+        echo -e "${GREEN}✅ Tag pushed${NC}"
+    else
+        echo -e "${RED}❌ Failed to push tag${NC}"
+        echo -e "${YELLOW}ℹ️  Tag may already exist on remote or push failed${NC}"
+        echo "You can manually push the tag with:"
+        echo "  git push origin $TAG_NAME"
+        exit 1
+    fi
 fi
 
 # Success message

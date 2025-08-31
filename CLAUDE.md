@@ -66,6 +66,10 @@ pip install bleak>=1.0.1
 # Quick patch release (recommended for most changes)
 ./release.sh
 
+# Auto-confirmed releases (no prompts - ideal for scripts)
+./release.sh -y                                    # Patch with auto-confirm
+./release.sh --yes minor "Add new feature"         # Minor with auto-confirm
+
 # Semantic versioning
 ./release.sh patch    # Bug fixes (0.0.x)
 ./release.sh minor    # New features (0.x.0)
@@ -75,17 +79,23 @@ pip install bleak>=1.0.1
 ./release.sh v1.2.3   # Specific version
 ./release.sh 1.2.3    # Specific version (v prefix optional)
 
+# Test what would happen (dry run)
+./release.sh --dry-run -y minor                    # Test minor increment
+./release.sh -n --yes v1.0.0                       # Test specific version
+
 # With custom commit message
-./release.sh minor "Add new BLE reconnection feature"
+./release.sh -y minor "Add new BLE reconnection feature"
 ```
 
 The release script automatically:
-1. ✅ Stages all uncommitted changes
-2. ✅ Commits with appropriate message
-3. ✅ Pushes commits to main branch
-4. ✅ Creates and pushes version tag
-5. ✅ Triggers GitHub workflow for automatic release
-6. ✅ Updates manifest.json version via workflow
+1. ✅ Checks for and pulls latest remote changes
+2. ✅ Stages all uncommitted changes
+3. ✅ Commits with appropriate message
+4. ✅ Pushes commits to main branch
+5. ✅ Creates and pushes version tag
+6. ✅ Triggers GitHub workflow for automatic release
+7. ✅ Updates manifest.json version via workflow
+8. ✅ Handles conflicts and errors gracefully
 
 ### Manual Release Commands (NOT RECOMMENDED)
 
