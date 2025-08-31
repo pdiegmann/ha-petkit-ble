@@ -6,9 +6,87 @@
 
 set -e
 
-# Dry run mode (set to true for testing)
+# Colors for output (define early)
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Configuration
 DRY_RUN=false
 AUTO_YES=false
+
+# Helper function for error messages
+show_error() {
+    echo -e "${RED}❌ Error: $1${NC}" >&2
+    if [ "$2" != "" ]; then
+        echo -e "${YELLOW}💡 Suggestion: $2${NC}" >&2
+    fi
+}
+
+# Helper function for warnings
+show_warning() {
+    echo -e "${YELLOW}⚠️  Warning: $1${NC}" >&2
+}
+
+# Helper function for info messages
+show_info() {
+    echo -e "${BLUE}ℹ️  $1${NC}"
+}
+
+# Helper function for success messages
+show_success() {
+    echo -e "${GREEN}✅ $1${NC}"
+}
+
+# Function to display usage
+show_usage() {
+    echo -e "${CYAN}📦 PetKit BLE Release Script${NC}"
+    echo "Automated version management and release creation for PetKit BLE integration"
+    echo ""
+    echo -e "${YELLOW}Usage:${NC} $0 [OPTIONS] [VERSION_TYPE] [COMMIT_MESSAGE]"
+    echo ""
+    echo -e "${YELLOW}Options:${NC}"
+    echo "  --help, -h     Show this help message and exit"
+    echo "  --dry-run, -n  Show what would be done without executing"
+    echo "  --yes, -y      Skip confirmation prompts (auto-confirm)"
+    echo ""
+    echo -e "${YELLOW}Version Types:${NC}"
+    echo "  patch          Increment patch version (0.0.x) - Bug fixes [DEFAULT]"
+    echo "  minor          Increment minor version (0.x.0) - New features"
+    echo "  major          Increment major version (x.0.0) - Breaking changes"
+    echo "  x.y.z          Set specific version (e.g., 1.2.3 or v1.2.3)"
+    echo ""
+    echo -e "${YELLOW}Examples:${NC}"
+    echo -e "${GREEN}Basic Usage:${NC}"
+    echo "  $0                                    # Increment patch version (interactive)"
+    echo "  $0 minor                              # Increment minor version (interactive)"
+    echo ""
+    echo -e "${GREEN}Automated Usage (no prompts):${NC}"
+    echo "  $0 -y                                 # Quick patch release"
+    echo "  $0 -y minor \"Add device support\"     # Minor release with message"
+    echo "  $0 --yes major \"Breaking changes\"    # Major release with message"
+    echo ""
+    echo -e "${GREEN}Testing (dry run):${NC}"
+    echo "  $0 --dry-run minor                    # Test minor increment"
+    echo "  $0 -n -y v2.1.0                      # Test specific version"
+    echo ""
+    echo -e "${GREEN}Custom Versions:${NC}"
+    echo "  $0 -y v1.0.0 \"First stable release\"  # Set specific version"
+    echo "  $0 -y 2.1.0                          # Version without 'v' prefix"
+    echo ""
+    echo -e "${YELLOW}What the script does:${NC}"
+    echo "  1. 🔍 Checks for remote updates and pulls if needed"
+    echo "  2. 📦 Stages all uncommitted changes"
+    echo "  3. 📝 Creates commit with semantic versioning message"
+    echo "  4. 🚀 Pushes commits and creates version tag"
+    echo "  5. 🤖 Triggers GitHub workflow for release creation"
+    echo "  6. ✨ Updates manifest.json automatically via workflow"
+    echo ""
+    echo -e "${BLUE}💡 Note:${NC} Never manually edit manifest.json version - it's handled automatically!"
+}
 
 # Parse flags
 while [[ $1 == --* ]] || [[ $1 == -* ]]; do
@@ -21,48 +99,16 @@ while [[ $1 == --* ]] || [[ $1 == -* ]]; do
             AUTO_YES=true
             shift
             ;;
-        *)
-            echo -e "${RED}❌ Unknown flag: $1${NC}"
+        --help|-h)
             show_usage
+            exit 0
+            ;;
+        *)
+            show_error "Unknown flag: $1" "Use --help to see available options"
             exit 1
             ;;
     esac
 done
-
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
-
-# Function to display usage
-show_usage() {
-    echo -e "${CYAN}📦 PetKit BLE Release Script${NC}"
-    echo ""
-    echo "Usage: $0 [--dry-run] [--yes] [version|major|minor|patch] [commit message]"
-    echo ""
-    echo "Options:"
-    echo "  --dry-run, -n  - Show what would be done without executing"
-    echo "  --yes, -y      - Skip confirmation prompts (auto-confirm)"
-    echo ""
-    echo "Arguments:"
-    echo "  version    - Specific version (e.g., 1.2.3 or v1.2.3)"
-    echo "  major      - Increment major version (x.0.0)"
-    echo "  minor      - Increment minor version (0.x.0)"
-    echo "  patch      - Increment patch version (0.0.x) [default]"
-    echo "  (none)     - Same as 'patch'"
-    echo ""
-    echo "Examples:"
-    echo "  $0                                    # Increment patch version"
-    echo "  $0 -y patch                           # Increment patch (auto-confirm)"  
-    echo "  $0 --dry-run minor                    # Test minor increment"
-    echo "  $0 -y minor \"Add new feature\"        # Increment minor with message"
-    echo "  $0 --yes major \"Breaking changes\"    # Increment major with message"
-    echo "  $0 -y v2.1.0 \"Custom version\"        # Set specific version"
-    echo "  $0 --dry-run --yes 2.1.0             # Test specific version"
-}
 
 # Function to get current version from manifest
 get_current_version() {
@@ -137,6 +183,18 @@ generate_commit_message() {
     echo "Release with $changes"
 }
 
+# Check if we're in a git repository
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+    show_error "Not in a git repository" "Run 'git init' or navigate to a git repository"
+    exit 1
+fi
+
+# Check if git is configured
+if ! git config --get user.name > /dev/null || ! git config --get user.email > /dev/null; then
+    show_error "Git user not configured" "Run 'git config --global user.name \"Your Name\"' and 'git config --global user.email \"your.email@example.com\"'"
+    exit 1
+fi
+
 # Main script
 echo -e "${CYAN}🚀 PetKit BLE Release Script${NC}"
 if [ "$DRY_RUN" = true ]; then
@@ -144,263 +202,172 @@ if [ "$DRY_RUN" = true ]; then
 fi
 echo "==============================="
 
-# Check if we're in a git repository
-if ! git rev-parse --git-dir > /dev/null 2>&1; then
-    echo -e "${RED}❌ Error: Not in a git repository${NC}"
-    exit 1
+# Parse arguments
+VERSION_TYPE="${1:-patch}"
+COMMIT_MESSAGE="$2"
+
+# Get current version
+CURRENT_VERSION=$(get_current_version)
+show_info "Current version: $CURRENT_VERSION"
+
+# Determine new version
+if [[ $VERSION_TYPE =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    # Specific version provided
+    NEW_VERSION=$(echo $VERSION_TYPE | sed 's/^v//')
+    show_info "Setting specific version: $NEW_VERSION"
+else
+    # Increment version
+    case $VERSION_TYPE in
+        major|minor|patch)
+            NEW_VERSION=$(increment_version $CURRENT_VERSION $VERSION_TYPE)
+            show_info "Incrementing $VERSION_TYPE version: $CURRENT_VERSION → $NEW_VERSION"
+            ;;
+        *)
+            show_error "Invalid version type: $VERSION_TYPE" "Use 'major', 'minor', 'patch', or specify version like '1.2.3'"
+            exit 1
+            ;;
+    esac
 fi
 
-# Check if we need to pull changes from remote
-echo -e "${BLUE}🔍 Checking remote status...${NC}"
-git fetch origin main
-
-# Check if local is behind remote
-LOCAL_COMMIT=$(git rev-parse HEAD)
-REMOTE_COMMIT=$(git rev-parse origin/main)
-
-if [ "$LOCAL_COMMIT" != "$REMOTE_COMMIT" ]; then
-    echo -e "${YELLOW}⚠️  Local branch is behind remote${NC}"
+# Check for remote updates
+show_info "Checking for remote updates..."
+if [ "$DRY_RUN" != true ]; then
+    git fetch origin main
     
-    # Check if there are local changes
-    if [ -n "$(git status --porcelain)" ]; then
-        echo -e "${YELLOW}📝 Found local changes - stashing for pull...${NC}"
+    # Check if we need to pull
+    LOCAL=$(git rev-parse @)
+    REMOTE=$(git rev-parse @{u} 2>/dev/null || echo "")
+    
+    if [ -n "$REMOTE" ] && [ "$LOCAL" != "$REMOTE" ]; then
+        show_warning "Remote changes detected. Stashing local changes and pulling..."
         
-        # Stash changes temporarily
-        git stash push -m "Temporary stash for release script pull"
+        # Check if there are local changes to stash
+        if ! git diff --quiet || ! git diff --cached --quiet; then
+            git stash push -m "Pre-release stash $(date)"
+            STASHED=true
+        else
+            STASHED=false
+        fi
         
-        # Pull the latest changes
-        echo -e "${BLUE}→ Pulling latest changes...${NC}"
-        if git pull origin main; then
-            echo -e "${GREEN}✅ Successfully pulled latest changes${NC}"
-            
-            # Restore stashed changes
-            echo -e "${BLUE}→ Restoring local changes...${NC}"
+        git pull origin main
+        
+        # Restore stashed changes if any
+        if [ "$STASHED" = true ]; then
             if git stash pop; then
-                echo -e "${GREEN}✅ Local changes restored${NC}"
+                show_success "Local changes restored successfully"
             else
-                echo -e "${RED}❌ Failed to restore local changes${NC}"
-                echo -e "${YELLOW}ℹ️  Your changes are in the stash. You can restore them with:${NC}"
-                echo "  git stash pop"
+                show_error "Failed to restore stashed changes" "Resolve conflicts manually and run the script again"
                 exit 1
             fi
-        else
-            echo -e "${RED}❌ Failed to pull latest changes${NC}"
-            echo -e "${BLUE}→ Restoring stashed changes...${NC}"
-            git stash pop
-            exit 1
         fi
-    else
-        echo -e "${BLUE}→ Pulling latest changes...${NC}"
-        git pull origin main
-        echo -e "${GREEN}✅ Successfully pulled latest changes${NC}"
     fi
-    
-    echo ""
-fi
-
-# Check for uncommitted changes
-if [ -n "$(git status --porcelain)" ]; then
-    echo -e "${YELLOW}📝 Found uncommitted changes${NC}"
-    
-    # Show changes
-    echo ""
-    echo -e "${BLUE}Modified files:${NC}"
-    git status --short
-    echo ""
-fi
-
-# Parse arguments
-VERSION_ARG="${1:-patch}"
-COMMIT_MESSAGE="${2:-}"
-
-# Determine version increment type or specific version
-CURRENT_VERSION=$(get_current_version)
-echo -e "${BLUE}📌 Current version: ${CURRENT_VERSION}${NC}"
-
-# Check if first argument is a version number
-if [[ $VERSION_ARG =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    # Specific version provided
-    NEW_VERSION="${VERSION_ARG#v}"  # Remove 'v' prefix if present
-    echo -e "${YELLOW}📝 Setting specific version: ${NEW_VERSION}${NC}"
-elif [[ $VERSION_ARG =~ ^(major|minor|patch)$ ]]; then
-    # Increment type provided
-    NEW_VERSION=$(increment_version "$CURRENT_VERSION" "$VERSION_ARG")
-    echo -e "${YELLOW}📝 Incrementing ${VERSION_ARG} version: ${CURRENT_VERSION} → ${NEW_VERSION}${NC}"
 else
-    # Invalid argument
-    echo -e "${RED}❌ Invalid version argument: $VERSION_ARG${NC}"
-    echo ""
-    show_usage
-    exit 1
+    echo "[DRY RUN] Would check for remote updates and pull if needed"
 fi
-
-# Add 'v' prefix for tag
-TAG_NAME="v${NEW_VERSION}"
-
-# Check if tag already exists
-if git tag -l "$TAG_NAME" | grep -q "$TAG_NAME"; then
-    echo -e "${RED}❌ Error: Tag $TAG_NAME already exists${NC}"
-    echo "Please choose a different version or delete the existing tag"
-    exit 1
-fi
-
-echo ""
-echo -e "${GREEN}📋 Release Plan:${NC}"
-echo "  Version: $CURRENT_VERSION → $NEW_VERSION"
-echo "  Tag: $TAG_NAME"
 
 # Stage all changes
-echo ""
-echo -e "${YELLOW}📂 Staging all changes...${NC}"
-git add -A
+show_info "Staging all changes..."
+if [ "$DRY_RUN" != true ]; then
+    git add -A
+else
+    echo "[DRY RUN] Would stage all changes (git add -A)"
+fi
 
 # Check if there are changes to commit
-if [ -z "$(git diff --cached --name-only)" ]; then
-    echo -e "${YELLOW}⚠️  No changes to commit${NC}"
-    
-    # Ask if user wants to create tag anyway
-    if [ "$AUTO_YES" = false ]; then
-        read -p "Do you want to create tag $TAG_NAME anyway? (y/N) " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo -e "${RED}❌ Release cancelled${NC}"
+if [ "$DRY_RUN" != true ]; then
+    if git diff --cached --quiet; then
+        show_warning "No changes to commit. Creating tag only..."
+        SKIP_COMMIT=true
+    else
+        SKIP_COMMIT=false
+    fi
+else
+    echo "[DRY RUN] Would check for staged changes"
+    SKIP_COMMIT=false
+fi
+
+# Generate or use provided commit message
+if [ "$SKIP_COMMIT" != true ]; then
+    if [ -z "$COMMIT_MESSAGE" ]; then
+        COMMIT_MESSAGE=$(generate_commit_message)
+        show_info "Generated commit message: $COMMIT_MESSAGE"
+    else
+        show_info "Using provided commit message: $COMMIT_MESSAGE"
+    fi
+fi
+
+# Show summary and confirm
+echo ""
+echo -e "${YELLOW}📋 Release Summary:${NC}"
+echo "  Current Version: $CURRENT_VERSION"
+echo "  New Version: $NEW_VERSION"
+if [ "$SKIP_COMMIT" != true ]; then
+    echo "  Commit Message: $COMMIT_MESSAGE"
+else
+    echo "  Commit: Skipped (no changes)"
+fi
+echo "  Tag: v$NEW_VERSION"
+echo ""
+
+# Confirm unless auto-yes is enabled
+if [ "$AUTO_YES" != true ] && [ "$DRY_RUN" != true ]; then
+    read -p "Continue with release? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        show_info "Release cancelled by user"
+        exit 0
+    fi
+fi
+
+# Create commit if there are changes
+if [ "$SKIP_COMMIT" != true ]; then
+    show_info "Creating commit..."
+    if [ "$DRY_RUN" != true ]; then
+        if git commit -m "$COMMIT_MESSAGE - v$NEW_VERSION"; then
+            show_success "Commit created successfully"
+        else
+            show_error "Failed to create commit" "Check git status and resolve any issues"
             exit 1
         fi
     else
-        echo -e "${YELLOW}⚠️  Auto-confirmed: Creating tag anyway${NC}"
+        echo "[DRY RUN] Would create commit with message: '$COMMIT_MESSAGE - v$NEW_VERSION'"
     fi
-    
-    SKIP_COMMIT=true
-else
-    SKIP_COMMIT=false
-    
-    # Generate or use provided commit message
-    if [ -z "$COMMIT_MESSAGE" ]; then
-        COMMIT_MESSAGE=$(generate_commit_message)
-    fi
-    
-    echo "  Commit: $COMMIT_MESSAGE"
 fi
 
-echo ""
-if [ "$AUTO_YES" = false ]; then
-    read -p "Do you want to proceed with the release? (y/N) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo -e "${RED}❌ Release cancelled${NC}"
-        # Unstage changes
-        git reset HEAD
+# Create tag
+show_info "Creating tag v$NEW_VERSION..."
+if [ "$DRY_RUN" != true ]; then
+    if git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"; then
+        show_success "Tag v$NEW_VERSION created successfully"
+    else
+        show_error "Failed to create tag" "Tag may already exist. Use 'git tag -d v$NEW_VERSION' to delete it first"
         exit 1
     fi
 else
-    echo -e "${GREEN}✅ Auto-confirmed: Proceeding with release${NC}"
+    echo "[DRY RUN] Would create tag: v$NEW_VERSION"
 fi
 
-# Perform release steps
-echo ""
-echo -e "${GREEN}🔧 Executing release...${NC}"
-
-# Commit changes if any
-if [ "$SKIP_COMMIT" = false ]; then
-    echo -e "${BLUE}→ Committing changes...${NC}"
-    
-    # Build detailed commit message
-    FULL_COMMIT_MESSAGE="chore: $COMMIT_MESSAGE - v$NEW_VERSION"
-    
-    if [ "$DRY_RUN" = true ]; then
-        echo -e "${YELLOW}[DRY RUN] Would commit: $FULL_COMMIT_MESSAGE${NC}"
+# Push commits and tags
+show_info "Pushing to remote..."
+if [ "$DRY_RUN" != true ]; then
+    if git push origin main && git push origin "v$NEW_VERSION"; then
+        show_success "Successfully pushed commits and tag to remote"
     else
-        git commit -m "$FULL_COMMIT_MESSAGE"
-        echo -e "${GREEN}✅ Changes committed${NC}"
-    fi
-fi
-
-# Push commits to main
-echo -e "${BLUE}→ Pushing commits to main...${NC}"
-if [ "$DRY_RUN" = true ]; then
-    echo -e "${YELLOW}[DRY RUN] Would push commits to origin/main${NC}"
-else
-    if git push origin main; then
-        echo -e "${GREEN}✅ Commits pushed${NC}"
-    else
-        echo -e "${RED}❌ Failed to push commits${NC}"
-        echo -e "${YELLOW}ℹ️  The remote may have been updated during the release process${NC}"
-        echo "Try pulling the latest changes and resolving any conflicts:"
-        echo "  git pull --rebase origin main"
-        echo "  git push origin main"
-        echo "  git push origin $TAG_NAME"
+        show_error "Failed to push to remote" "Check network connection and repository permissions"
         exit 1
     fi
-fi
-
-# Create and push tag
-echo -e "${BLUE}→ Creating tag $TAG_NAME...${NC}"
-
-# Generate tag message
-TAG_MESSAGE="Release $TAG_NAME
-
-Version: $NEW_VERSION"
-
-# Add summary of changes since last tag
-LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-if [ -n "$LAST_TAG" ]; then
-    TAG_MESSAGE="$TAG_MESSAGE
-
-Changes since $LAST_TAG:"
-    
-    # Get commit count
-    COMMIT_COUNT=$(git rev-list --count "$LAST_TAG"..HEAD)
-    TAG_MESSAGE="$TAG_MESSAGE
-- $COMMIT_COUNT commits"
-    
-    # Get brief commit list
-    COMMITS=$(git log --pretty=format:"- %s" "$LAST_TAG"..HEAD | head -10)
-    if [ -n "$COMMITS" ]; then
-        TAG_MESSAGE="$TAG_MESSAGE
-
-Recent commits:
-$COMMITS"
-    fi
-fi
-
-# Create annotated tag
-if [ "$DRY_RUN" = true ]; then
-    echo -e "${YELLOW}[DRY RUN] Would create tag: $TAG_NAME${NC}"
-    echo -e "${YELLOW}[DRY RUN] Tag message:${NC}"
-    echo "$TAG_MESSAGE" | sed 's/^/  /'
 else
-    git tag -a "$TAG_NAME" -m "$TAG_MESSAGE"
-    echo -e "${GREEN}✅ Tag created${NC}"
-fi
-
-# Push tag
-echo -e "${BLUE}→ Pushing tag $TAG_NAME...${NC}"
-if [ "$DRY_RUN" = true ]; then
-    echo -e "${YELLOW}[DRY RUN] Would push tag to origin${NC}"
-else
-    if git push origin "$TAG_NAME"; then
-        echo -e "${GREEN}✅ Tag pushed${NC}"
-    else
-        echo -e "${RED}❌ Failed to push tag${NC}"
-        echo -e "${YELLOW}ℹ️  Tag may already exist on remote or push failed${NC}"
-        echo "You can manually push the tag with:"
-        echo "  git push origin $TAG_NAME"
-        exit 1
-    fi
+    echo "[DRY RUN] Would push commits and tag to remote"
 fi
 
 # Success message
 echo ""
-echo -e "${GREEN}🎉 Release $TAG_NAME completed successfully!${NC}"
+echo -e "${GREEN}🎉 Release v$NEW_VERSION completed successfully!${NC}"
 echo ""
-echo -e "${CYAN}📋 Summary:${NC}"
-echo "  • Version updated: $CURRENT_VERSION → $NEW_VERSION"
-echo "  • Tag created: $TAG_NAME"
-echo "  • GitHub workflow triggered"
+echo -e "${BLUE}📋 What happens next:${NC}"
+echo "  1. ✅ Commits and tag pushed to GitHub"
+echo "  2. 🤖 GitHub Actions workflow will update manifest.json"
+echo "  3. 📦 GitHub release will be created automatically"
+echo "  4. 🔗 Release URL: https://github.com/pdiegmann/ha-petkit-ble/releases/tag/v$NEW_VERSION"
 echo ""
-echo -e "${CYAN}🔗 Links:${NC}"
-echo "  • Release: https://github.com/pdiegmann/ha-petkit-ble/releases/tag/$TAG_NAME"
-echo "  • Actions: https://github.com/pdiegmann/ha-petkit-ble/actions"
-echo ""
-echo -e "${YELLOW}ℹ️  Note: The GitHub workflow will automatically update manifest.json${NC}"
-echo -e "${YELLOW}    No manual version updates needed!${NC}"
+echo -e "${YELLOW}⏱️  The GitHub workflow typically takes 1-2 minutes to complete.${NC}"

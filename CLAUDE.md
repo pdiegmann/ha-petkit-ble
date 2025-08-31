@@ -1,6 +1,8 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+**Claude Code Instructions for PetKit BLE Integration**
+
+This file provides comprehensive guidance for Claude Code (claude.ai/code) when working with this repository. Follow these instructions exactly to maintain consistency and quality.
 
 ## Project Overview
 
@@ -58,57 +60,125 @@ pip install bleak>=1.0.1
 
 ## Release Management
 
-### Automated Release Process
+### 🚀 Automated Release Process
 
-**IMPORTANT**: Always use the automated release script for version management. Never manually update version numbers in manifest.json - this is handled automatically by the GitHub workflow.
+**CRITICAL**: Always use the automated release script (`./release.sh`) for ALL releases. Never manually edit version numbers in `manifest.json` - this is handled automatically by the GitHub workflow.
+
+#### 📋 Quick Reference
 
 ```bash
-# Quick patch release (recommended for most changes)
-./release.sh
+# Most common usage (interactive)
+./release.sh                    # Patch version increment with prompts
+./release.sh minor              # Minor version increment with prompts
 
-# Auto-confirmed releases (no prompts - ideal for scripts)
-./release.sh -y                                    # Patch with auto-confirm
-./release.sh --yes minor "Add new feature"         # Minor with auto-confirm
+# Automated usage (no prompts - ideal for scripts)
+./release.sh -y                                 # Quick patch release
+./release.sh -y minor "Add device support"      # Minor release with message
+./release.sh --yes major "Breaking changes"     # Major release with message
 
-# Semantic versioning
-./release.sh patch    # Bug fixes (0.0.x)
-./release.sh minor    # New features (0.x.0)
-./release.sh major    # Breaking changes (x.0.0)
+# Testing (dry run)
+./release.sh --dry-run minor                    # See what would happen
+./release.sh -n -y v1.0.0                      # Test specific version
 
-# Custom version
-./release.sh v1.2.3   # Specific version
-./release.sh 1.2.3    # Specific version (v prefix optional)
+# Custom versions
+./release.sh -y v2.1.0 "Stable release"        # Set specific version
+./release.sh -y 1.0.0                          # Version without 'v' prefix
 
-# Test what would happen (dry run)
-./release.sh --dry-run -y minor                    # Test minor increment
-./release.sh -n --yes v1.0.0                       # Test specific version
-
-# With custom commit message
-./release.sh -y minor "Add new BLE reconnection feature"
+# Help
+./release.sh --help                            # Show detailed usage
 ```
 
-The release script automatically:
-1. ✅ Checks for and pulls latest remote changes
-2. ✅ Stages all uncommitted changes
-3. ✅ Commits with appropriate message
-4. ✅ Pushes commits to main branch
-5. ✅ Creates and pushes version tag
-6. ✅ Triggers GitHub workflow for automatic release
-7. ✅ Updates manifest.json version via workflow
-8. ✅ Handles conflicts and errors gracefully
+#### 🎯 Semantic Versioning Guide
 
-### Manual Release Commands (NOT RECOMMENDED)
+| Version Type | When to Use | Example | Command |
+|--------------|-------------|---------|----------|
+| **Patch** (0.0.x) | Bug fixes, small improvements | 0.1.38 → 0.1.39 | `./release.sh` or `./release.sh patch` |
+| **Minor** (0.x.0) | New features, enhancements | 0.1.38 → 0.2.0 | `./release.sh minor` |
+| **Major** (x.0.0) | Breaking changes, major refactors | 0.1.38 → 1.0.0 | `./release.sh major` |
+| **Custom** | Specific version requirement | 0.1.38 → 2.5.1 | `./release.sh v2.5.1` |
 
-Only use these if the automated script fails:
+#### ⚙️ What the Script Does Automatically
+
+1. **🔍 Environment Validation**
+   - Verifies git repository and required files
+   - Checks for required commands (git, python3)
+   - Validates manifest.json exists
+
+2. **🔄 Remote Synchronization** 
+   - Fetches latest changes from remote
+   - Automatically pulls and rebases if needed
+   - Stashes/restores local changes safely
+
+3. **📦 Version Management**
+   - Increments version according to semantic versioning
+   - Validates version doesn't already exist
+   - Prevents duplicate or invalid versions
+
+4. **💾 Git Operations**
+   - Stages ALL uncommitted changes
+   - Creates semantic commit messages
+   - Pushes commits to main branch
+   - Creates and pushes annotated version tags
+
+5. **🤖 Workflow Automation**
+   - Triggers GitHub Actions workflow
+   - Updates manifest.json automatically
+   - Generates AI-powered release notes
+   - Creates downloadable GitHub release
+
+#### 🛡️ Built-in Safety Features
+
+- **Comprehensive error messages** with suggested fixes
+- **Dry-run mode** to test changes without executing
+- **Automatic conflict resolution** with stash/restore
+- **Version validation** to prevent duplicates
+- **Recovery instructions** when operations fail
+- **Environment checks** before starting
+- **Graceful failure** with cleanup
+
+### ⚠️ Manual Release Commands (EMERGENCY ONLY)
+
+**WARNING**: Only use manual commands if the release script completely fails and cannot be fixed.
 
 ```bash
-# Manual process (avoid if possible)
+# EMERGENCY manual process (avoid if possible)
 git add -A
-git commit -m "feat: describe your changes"
+git commit -m "chore: emergency release - v0.1.41"
 git push origin main
-git tag -a v0.1.40 -m "Release v0.1.40"
-git push origin v0.1.40
+git tag -a v0.1.41 -m "Emergency release v0.1.41"
+git push origin v0.1.41
+# Note: This will NOT update manifest.json automatically
 ```
+
+#### 🔧 Troubleshooting Release Script
+
+If the release script fails, try these steps:
+
+```bash
+# 1. Check environment and permissions
+./release.sh --help                    # Verify script works
+git status                              # Check repository state
+git remote -v                          # Verify remote access
+
+# 2. Test with dry run
+./release.sh --dry-run patch           # Test without changes
+
+# 3. Manual git operations if needed
+git fetch origin main                  # Update remote info
+git pull --rebase origin main          # Sync with remote
+git push origin main                   # Test push access
+
+# 4. Reset if stuck
+git stash                              # Save local changes
+git reset --hard origin/main           # Reset to remote state
+git stash pop                          # Restore changes
+```
+
+#### 📚 Additional Resources
+
+- **Detailed Guide**: See [RELEASE_AUTOMATION.md](RELEASE_AUTOMATION.md)
+- **Testing Guide**: See [.github/RELEASE_TESTING.md](.github/RELEASE_TESTING.md)
+- **Workflow Details**: See [.github/workflows/release.yml](.github/workflows/release.yml)
 
 ### System Service Setup
 
@@ -137,23 +207,68 @@ Device class manages three categories of state:
 - Maintains device status, configuration, and info properties
 - Supports device control through Commands interface
 
-### Error Handling
+### Error Handling & Reconnection
 
-- Implements connection retry logic in BLEManager
-- Graceful cleanup on KeyboardInterrupt
-- Automatic device reconnection on communication failures
+- **Immediate reconnection** on BLE disconnect (100ms initial delay)
+- **Progressive retry delays**: 100ms → 500ms → 1s → 5s for optimal recovery
+- **Continuous retry attempts** until connection is restored
+- **Connection state tracking** with detailed logging
+- **Graceful cleanup** on KeyboardInterrupt
+- **Automatic recovery** from temporary connection failures
+- **Enhanced logging** with emojis for better visibility (🔄, ✅, ⚠️, ❌)
 
-## Important Caveats
+## Important Notes & Limitations
 
-- Device ID and secret handling is incomplete (hardcoded values)
-- Using CMD 73 may interfere with official app communication
-- Do Not Disturb and Lights Out scheduling not yet supported
-- Only tested with Petkit Eversweet 2 Solo
-- MQTT functionality has been removed - library now provides BLE-only control
+### ⚠️ Current Limitations
+- **Device compatibility**: Only tested with Petkit Eversweet 2 Solo
+- **Device ID/secret**: Uses hardcoded values (device-specific implementation needed)
+- **Scheduling features**: Do Not Disturb and Lights Out scheduling not yet supported
+- **App interference**: Using CMD 73 may interfere with official Petkit app communication
 
-## File Structure Notes
+### ✅ What Works Well
+- **BLE-only operation**: No cloud dependencies, fully local control
+- **Immediate reconnection**: Auto-reconnects within 100ms of disconnect
+- **Home Assistant integration**: Full HA entity and service support
+- **Real-time updates**: Live status monitoring and control
+- **Automated releases**: Complete CI/CD pipeline with version management
 
-- All core functionality is in the `PetkitW5BLEMQTT/` package
-- `main.py` serves as the entry point and orchestrator
-- No test suite is currently present
-- Dependencies are minimal (bleak for BLE communication only)
+### 🔄 Migration Notes
+- **MQTT removed**: Library now provides BLE-only control
+- **Legacy service files**: systemd service file contains outdated MQTT parameters
+- **Version management**: Always use `./release.sh` - never edit manifest.json manually
+
+## Project Structure
+
+### 📁 Core Files
+```
+├── custom_components/petkit_ble/     # Home Assistant integration
+│   ├── __init__.py                   # Integration setup
+│   ├── manifest.json                 # Integration metadata (auto-updated)
+│   ├── coordinator.py                # Data coordinator with reconnection
+│   ├── ha_bluetooth_adapter.py       # HA Bluetooth integration
+│   └── [sensors, switches, etc.]     # HA entity implementations
+├── PetkitW5BLEMQTT/                  # Core BLE library
+│   ├── main.py                       # Entry point and orchestrator
+│   ├── ble_manager.py                # BLE connection management
+│   ├── device.py                     # Device state management
+│   ├── commands.py                   # Device command interface
+│   ├── event_handlers.py             # BLE notification processing
+│   └── [parsers, utils, constants]   # Support modules
+└── release.sh                        # Automated release script
+```
+
+### 🔧 Release & CI/CD Files
+```
+├── .github/workflows/release.yml     # GitHub Actions workflow
+├── .github/update-manifest-version.py# Version update script
+├── .github/test-*.sh                 # Testing scripts
+├── release.sh                        # Main release automation
+├── RELEASE_AUTOMATION.md             # Release guide
+└── CLAUDE.md                         # This file - Claude instructions
+```
+
+### 📦 Dependencies
+- **Minimal runtime**: `bleak>=1.0.1`, `bleak-retry-connector>=3.0.0`
+- **Development**: Standard Python tools (git, python3)
+- **Testing**: Optional `act` for local workflow testing
+- **No test suite**: Currently manual testing only
