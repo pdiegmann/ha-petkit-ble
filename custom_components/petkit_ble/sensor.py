@@ -107,12 +107,17 @@ class PetkitFilterPercentageSensor(PetkitSensorBase):
         """Initialize the filter percentage sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._get_device_id()}_filter_percentage"
-        self._attr_name = f"{coordinator.device.name_readable} Filter"
+        self._sensor_name_template = "{device_name} Filter Remaining"
     
     @property
-    def native_value(self) -> int | None:
-        """Return the filter percentage."""
-        return self.coordinator.current_data.get("status", {}).get("filter_percentage")
+    def native_value(self) -> float | None:
+        """Return the filter percentage remaining."""
+        raw_value = self.coordinator.current_data.get("status", {}).get("filter_percentage")
+        if raw_value is not None:
+            # Convert from used percentage to remaining percentage
+            # If raw is 0.9 (0.9% used), return 99.1% remaining
+            return round(100 - raw_value, 1)
+        return None
 
 class PetkitFilterTimeLeftSensor(PetkitSensorBase):
     """Filter time left sensor."""
@@ -125,7 +130,7 @@ class PetkitFilterTimeLeftSensor(PetkitSensorBase):
         """Initialize the filter time left sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._get_device_id()}_filter_time_left"
-        self._attr_name = f"{coordinator.device.name_readable} Filter Time Left"
+        self._sensor_name_template = "{device_name} Filter Days Left"
     
     @property
     def native_value(self) -> int | None:
@@ -143,7 +148,7 @@ class PetkitPumpRuntimeSensor(PetkitSensorBase):
         """Initialize the pump runtime sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._get_device_id()}_pump_runtime"
-        self._attr_name = f"{coordinator.device.name_readable} Pump Runtime"
+        self._sensor_name_template = "{device_name} Pump Total Runtime"
     
     @property
     def native_value(self) -> float | None:
@@ -179,7 +184,7 @@ class PetkitPumpRuntimeTodaySensor(PetkitSensorBase):
         """Initialize the pump runtime today sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._get_device_id()}_pump_runtime_today"
-        self._attr_name = f"{coordinator.device.name_readable} Pump Runtime Today"
+        self._sensor_name_template = "{device_name} Pump Today Runtime"
     
     @property
     def native_value(self) -> float | None:
@@ -215,7 +220,7 @@ class PetkitPurifiedWaterSensor(PetkitSensorBase):
         """Initialize the purified water sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._get_device_id()}_purified_water"
-        self._attr_name = f"{coordinator.device.name_readable} Purified Water"
+        self._sensor_name_template = "{device_name} Total Water Purified"
     
     @property
     def native_value(self) -> float | None:
@@ -233,7 +238,7 @@ class PetkitPurifiedWaterTodaySensor(PetkitSensorBase):
         """Initialize the purified water today sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._get_device_id()}_purified_water_today"
-        self._attr_name = f"{coordinator.device.name_readable} Purified Water Today"
+        self._sensor_name_template = "{device_name} Water Purified Today"
     
     @property
     def native_value(self) -> float | None:
@@ -251,7 +256,7 @@ class PetkitEnergyConsumedSensor(PetkitSensorBase):
         """Initialize the energy consumed sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._get_device_id()}_energy_consumed"
-        self._attr_name = f"{coordinator.device.name_readable} Energy Consumed"
+        self._sensor_name_template = "{device_name} Energy Consumption"
     
     @property
     def native_value(self) -> float | None:
@@ -270,7 +275,7 @@ class PetkitRSSISensor(PetkitSensorBase):
         """Initialize the RSSI sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._get_device_id()}_rssi"
-        self._attr_name = f"{coordinator.device.name_readable} Signal Strength"
+        self._sensor_name_template = "{device_name} Signal Strength"
     
     @property
     def native_value(self) -> int | None:
@@ -289,7 +294,7 @@ class PetkitVoltageSensor(PetkitSensorBase):
         """Initialize the voltage sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._get_device_id()}_voltage"
-        self._attr_name = f"{coordinator.device.name_readable} Voltage"
+        self._sensor_name_template = "{device_name} Power Voltage"
     
     @property
     def native_value(self) -> float | None:
@@ -305,7 +310,7 @@ class PetkitConnectionStatusSensor(PetkitSensorBase):
         """Initialize the connection status sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._get_device_id()}_connection_status"
-        self._attr_name = f"{coordinator.device.name_readable} Connection Status"
+        self._sensor_name_template = "{device_name} Connection Status"
     
     @property
     def native_value(self) -> str | None:
@@ -323,7 +328,7 @@ class PetkitConnectionAttemptsSensor(PetkitSensorBase):
         """Initialize the connection attempts sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._get_device_id()}_connection_attempts"
-        self._attr_name = f"{coordinator.device.name_readable} Connection Attempts"
+        self._sensor_name_template = "{device_name} Connection Attempts"
     
     @property
     def native_value(self) -> int | None:
@@ -341,7 +346,7 @@ class PetkitLastSeenSensor(PetkitSensorBase):
         """Initialize the last seen sensor."""
         super().__init__(coordinator)
         self._attr_unique_id = f"{self._get_device_id()}_last_seen"
-        self._attr_name = f"{coordinator.device.name_readable} Last Seen"
+        self._sensor_name_template = "{device_name} Last Seen"
     
     @property
     def native_value(self) -> datetime | None:
